@@ -27,11 +27,11 @@
 services:
   api:
     ports:
-      - "${C7_PICS_API_HOST_PORT:-127.0.0.1:4000}:4000"
+      - "127.0.0.1:${C7_PICS_API_HOST_PORT:-4000}:4000"
 
   web:
     ports:
-      - "${C7_PICS_WEB_HOST_PORT:-127.0.0.1:3000}:3000"
+      - "127.0.0.1:${C7_PICS_WEB_HOST_PORT:-3000}:3000"
 
   # Disable Caddy: the host's /etc/caddy/Caddyfile is authoritative.
   caddy:

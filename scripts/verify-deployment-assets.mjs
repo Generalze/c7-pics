@@ -30,6 +30,8 @@ const requiredAssets = [
   "deploy/docker/web.Dockerfile",
   "deploy/docker/worker.Dockerfile",
   "deploy/caddy/Caddyfile",
+  "deploy/caddy/Caddyfile.shared-host",
+  "deploy/docker-compose.shared-host.yml",
   "deploy/coturn/turnserver.conf.template",
   "deploy/coturn/entrypoint.sh",
   ".env.production.example",
@@ -37,6 +39,7 @@ const requiredAssets = [
   "deploy/storage/bucket-policy.json",
   "deploy/storage/README.md",
   "docs/DEPLOYMENT_VPS.md",
+  "docs/DEPLOYMENT_SHARED_HOST.md",
   ".dockerignore",
 ];
 
@@ -113,6 +116,27 @@ if (!caddyfile.includes("/socket.io/")) {
 }
 if (!caddyfile.includes("handle_path /api/*")) {
   failures.push("Caddy must expose the API under /api for the current frontend contract.");
+}
+
+// Shared-host Caddyfile validations
+const caddyfileSharedHost = contents.get("deploy/caddy/Caddyfile.shared-host") || "";
+if (!caddyfileSharedHost.includes("@socketio path /socket.io/*")) {
+  failures.push("Shared-host Caddyfile must match Socket.IO routes (@socketio path /socket.io/*).");
+}
+if (!caddyfileSharedHost.includes("handle_path /api/*")) {
+  failures.push("Shared-host Caddyfile must expose API under /api with handle_path.");
+}
+if (!caddyfileSharedHost.includes("127.0.0.1:4000")) {
+  failures.push("Shared-host Caddyfile must proxy API to loopback-only 127.0.0.1:4000.");
+}
+if (!caddyfileSharedHost.includes("127.0.0.1:3000")) {
+  failures.push("Shared-host Caddyfile must proxy web to loopback-only 127.0.0.1:3000.");
+}
+if (!caddyfileSharedHost.includes("rewrite /health")) {
+  failures.push("Shared-host Caddyfile must rewrite /healthz to /health for the health probe.");
+}
+if (!caddyfileSharedHost.includes("request_body")) {
+  failures.push("Shared-host Caddyfile must declare request_body ceiling (match API_JSON_BODY_LIMIT).");
 }
 
 const turnTemplate = contents.get("deploy/coturn/turnserver.conf.template") || "";
@@ -343,6 +367,28 @@ if (storageReadme) {
       "deploy/storage/README.md still claims the application never deletes. It deletes exactly one thing: an uncommitted registration object.",
     );
   }
+}
+
+// Shared-host Docker Compose override validations
+const sharedHostCompose = contents.get("deploy/docker-compose.shared-host.yml") || "";
+if (!sharedHostCompose.includes("127.0.0.1:${C7_PICS_API_HOST_PORT:-4000}:4000")) {
+  failures.push("Shared-host override must bind API to immutable loopback 127.0.0.1 (not just port override).");
+}
+if (!sharedHostCompose.includes("127.0.0.1:${C7_PICS_WEB_HOST_PORT:-3000}:3000")) {
+  failures.push("Shared-host override must bind web to immutable loopback 127.0.0.1 (not just port override).");
+}
+if (sharedHostCompose.includes('"5432:5432"') || sharedHostCompose.includes('"6379:6379"') ||
+    sharedHostCompose.includes("5432:5432") || sharedHostCompose.includes("6379:6379")) {
+  failures.push("Shared-host override must not publish postgres or redis to the host.");
+}
+if (!sharedHostCompose.includes("deploy:") || !sharedHostCompose.includes("replicas: 0")) {
+  failures.push("Shared-host override must disable Caddy container (replicas: 0).");
+}
+if (!sharedHostCompose.includes("TURN_PORT") || !sharedHostCompose.includes("3479")) {
+  failures.push("Shared-host override must configure separate TURN port (3479, not videofy's 3478).");
+}
+if (!sharedHostCompose.includes("TURN_MIN_PORT") || !sharedHostCompose.includes("49301")) {
+  failures.push("Shared-host override must configure separate TURN relay range (49301-49400).");
 }
 
 if (failures.length > 0) {

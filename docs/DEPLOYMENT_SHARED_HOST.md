@@ -138,7 +138,12 @@ coturn:
    # Verify ownership, permissions, and that file is not empty
    stat -c '%U %G %a %s %n' /etc/pics/production.env
    # Expected output: claude videofy 600 <size> /etc/pics/production.env
-   # If size is 0, operator must fill in secrets before deployment
+
+   # Enforce non-empty file before deployment
+   test -s /etc/pics/production.env || {
+     echo "ERROR: /etc/pics/production.env is empty"
+     exit 1
+   }
 
    # Operator fills in all STORAGE_*, TURN_*, DATABASE_*, JWT_* secrets
    ```
@@ -333,7 +338,7 @@ docker compose \
   -f deploy/docker-compose.shared-host.yml \
   --env-file /etc/pics/production.env \
   exec postgres \
-  sh -lc 'psql -U \"\\\$POSTGRES_USER\" -d \"\\\${POSTGRES_DB:-ogun_production}\" -c \"SELECT NOW();\"'"
+  sh -lc 'psql -U \"\$POSTGRES_USER\" -d \"\${POSTGRES_DB:-ogun_production}\" -c \"SELECT NOW();\"'"
 ```
 
 ## Object Storage (S3) Readiness

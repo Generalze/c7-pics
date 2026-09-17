@@ -371,6 +371,9 @@ if (storageReadme) {
 
 // Shared-host Docker Compose override validations
 const sharedHostCompose = contents.get("deploy/docker-compose.shared-host.yml") || "";
+if (!sharedHostCompose.includes("--env-file /etc/pics/production.env")) {
+  failures.push("Shared-host compose usage comment must document --env-file /etc/pics/production.env (not .env.production).");
+}
 if (!sharedHostCompose.includes("127.0.0.1:${C7_PICS_API_HOST_PORT:-4000}:4000")) {
   failures.push("Shared-host override must bind API to immutable loopback 127.0.0.1 (not just port override).");
 }
@@ -474,16 +477,31 @@ if (!preDeploySection.includes("stat -c '%U %G %a %s %n'")) {
 if (!preDeploySection.includes("claude videofy 600")) {
   failures.push("DEPLOYMENT_SHARED_HOST.md must document expected stat output showing correct ownership and permissions.");
 }
+if (!preDeploySection.includes("test -s /etc/pics/production.env")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must enforce non-empty production.env with 'test -s' check.");
+}
+if (!preDeploySection.includes("ERROR: /etc/pics/production.env is empty")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document error message when production.env is empty.");
+}
 
-// Verify database health command uses shell variable expansion with correct quoting
+// Verify database health command uses correct shell variable expansion
 if (!operationalSection.includes("sh -lc")) {
   failures.push("DEPLOYMENT_SHARED_HOST.md database health command must use 'sh -lc' for container-side variable expansion.");
 }
 if (!operationalSection.includes("POSTGRES_USER")) {
   failures.push("DEPLOYMENT_SHARED_HOST.md database health command must reference $POSTGRES_USER.");
 }
-if (!operationalSection.includes('\\$POSTGRES_USER') && !operationalSection.includes("\\\\$POSTGRES_USER")) {
-  failures.push("DEPLOYMENT_SHARED_HOST.md database health command must escape $POSTGRES_USER to prevent host-side expansion (use \\$POSTGRES_USER in single quotes or \\\\$ in double quotes).");
+// In double-quoted SSH context, use \$ (one backslash) to escape, not \\$ or \\\$
+if (operationalSection.includes('sh -lc') && operationalSection.includes('POSTGRES_USER')) {
+  const dbSection = operationalSection.slice(operationalSection.indexOf("sh -lc"));
+  // Should have \$ (escaped for local shell, becomes $ for remote)
+  // Should NOT have \\\\$ or \\\\\\$ (over-escaped)
+  if (dbSection.includes('\\\\\\\\$')) {
+    failures.push("DEPLOYMENT_SHARED_HOST.md database health: $POSTGRES_USER is over-escaped; use \\$ not \\\\\\$ in double-quoted SSH command.");
+  }
+  if (!dbSection.includes('\\$POSTGRES_USER')) {
+    failures.push("DEPLOYMENT_SHARED_HOST.md database health: $POSTGRES_USER must be escaped as \\$ to survive local shell in double-quoted SSH command.");
+  }
 }
 if (!operationalSection.includes("POSTGRES_DB")) {
   failures.push("DEPLOYMENT_SHARED_HOST.md database health command must reference ${POSTGRES_DB:-ogun_production}.");

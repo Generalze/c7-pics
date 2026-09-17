@@ -4,7 +4,7 @@
 #   docker compose \
 #     -f docker-compose.prod.yml \
 #     -f deploy/docker-compose.shared-host.yml \
-#     --env-file .env.production \
+#     --env-file /etc/pics/production.env \
 #     up -d
 #
 # DIFFERENCES FROM DEDICATED VPS:

@@ -7,7 +7,7 @@
 # an authoritative store for evidence or voter documents.
 #
 # Bring up with:  docker compose -f docker-compose.prod.yml --env-file .env.production up -d
-name: bmo-deedoc-production
+name: c7-pics-production
 
 x-logging: &default-logging
   driver: json-file
@@ -91,7 +91,7 @@ services:
       # The migrate target carries the Prisma CLI and the checksum verifier,
       # which are deliberately absent from the API runtime image.
       target: migrate
-    image: bmo-deedoc/migrate:${IMAGE_TAG:-latest}
+    image: c7-pics/migrate:${IMAGE_TAG:-latest}
     restart: "no"
     environment:
       NODE_ENV: production
@@ -109,7 +109,7 @@ services:
     build:
       context: .
       dockerfile: deploy/docker/api.Dockerfile
-    image: bmo-deedoc/api:${IMAGE_TAG:-latest}
+    image: c7-pics/api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: [.env.production]
     environment:
@@ -140,7 +140,7 @@ services:
     build:
       context: .
       dockerfile: deploy/docker/worker.Dockerfile
-    image: bmo-deedoc/worker:${IMAGE_TAG:-latest}
+    image: c7-pics/worker:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: [.env.production]
     environment:
@@ -173,7 +173,7 @@ services:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?NEXT_PUBLIC_API_BASE_URL is required}
         NEXT_PUBLIC_REALTIME_URL: ${NEXT_PUBLIC_REALTIME_URL:-}
         NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
-    image: bmo-deedoc/web:${IMAGE_TAG:-latest}
+    image: c7-pics/web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       NODE_ENV: production

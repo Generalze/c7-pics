@@ -442,28 +442,51 @@ if (!deploymentRunbook.slice(deploymentRunbook.indexOf("### Rollback") || 0, dep
 
 // Verify operational logs and database commands use shared-host override and env
 const operationalSection = deploymentRunbook.slice(deploymentRunbook.indexOf("### Post-Deployment") || 0);
-if (!operationalSection.includes("docker compose -f docker-compose.prod.yml -f deploy/docker-compose.shared-host.yml --env-file /etc/pics/production.env logs")) {
+const logsMatch = operationalSection.match(/docker compose.*-f docker-compose.prod.yml.*-f deploy\/docker-compose.shared-host.yml.*--env-file \/etc\/pics\/production.env.*logs/s);
+if (!logsMatch) {
   failures.push("DEPLOYMENT_SHARED_HOST.md post-deployment logs command must use shared-host override and env-file.");
 }
-if (!operationalSection.includes("docker compose -f docker-compose.prod.yml -f deploy/docker-compose.shared-host.yml --env-file /etc/pics/production.env exec")) {
+const execMatch = operationalSection.match(/docker compose.*-f docker-compose.prod.yml.*-f deploy\/docker-compose.shared-host.yml.*--env-file \/etc\/pics\/production.env.*exec/s);
+if (!execMatch) {
   failures.push("DEPLOYMENT_SHARED_HOST.md post-deployment exec/database command must use shared-host override and env-file.");
 }
 
-// Verify env file ownership procedure (not loose touch)
+// Verify env file ownership procedure is non-destructive
 const preDeploySection = deploymentRunbook.slice(deploymentRunbook.indexOf("### Pre-Deployment") || 0, deploymentRunbook.indexOf("### Deployment Command") || Infinity);
+if (!preDeploySection.includes("[ ! -e /etc/pics/production.env ]")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must guard env file creation with [ ! -e ] check to prevent overwriting existing secrets.");
+}
 if (!preDeploySection.includes("install") || !preDeploySection.includes("-o claude")) {
   failures.push("DEPLOYMENT_SHARED_HOST.md must create production.env with 'install' and owner 'claude' for deployment account access.");
 }
 if (!preDeploySection.includes("-g videofy") || !preDeploySection.includes("-m 600")) {
   failures.push("DEPLOYMENT_SHARED_HOST.md must create production.env with group 'videofy' and permissions '600'.");
 }
-if (!preDeploySection.includes("stat -c '%U %G %a %n'") || !preDeploySection.includes("claude videofy 600")) {
-  failures.push("DEPLOYMENT_SHARED_HOST.md must verify env file ownership and permissions with stat command.");
+if (!preDeploySection.includes("sudo chown claude:videofy /etc/pics/production.env")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must have else branch to preserve existing production.env while correcting ownership.");
+}
+if (!preDeploySection.includes("sudo chmod 600 /etc/pics/production.env")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must ensure existing production.env has correct permissions in else branch.");
+}
+if (!preDeploySection.includes("stat -c '%U %G %a %s %n'")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must verify env file with stat command including size (%s) to detect empty files.");
+}
+if (!preDeploySection.includes("claude videofy 600")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document expected stat output showing correct ownership and permissions.");
 }
 
-// Verify database health command uses shell variable expansion
-if (!operationalSection.includes("sh -lc") || !operationalSection.includes("$POSTGRES_USER")) {
-  failures.push("DEPLOYMENT_SHARED_HOST.md database health command must use 'sh -lc' to expand $POSTGRES_USER inside the container, not on the host.");
+// Verify database health command uses shell variable expansion with correct quoting
+if (!operationalSection.includes("sh -lc")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md database health command must use 'sh -lc' for container-side variable expansion.");
+}
+if (!operationalSection.includes("POSTGRES_USER")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md database health command must reference $POSTGRES_USER.");
+}
+if (!operationalSection.includes('\\$POSTGRES_USER') && !operationalSection.includes("\\\\$POSTGRES_USER")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md database health command must escape $POSTGRES_USER to prevent host-side expansion (use \\$POSTGRES_USER in single quotes or \\\\$ in double quotes).");
+}
+if (!operationalSection.includes("POSTGRES_DB")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md database health command must reference ${POSTGRES_DB:-ogun_production}.");
 }
 
 if (failures.length > 0) {

@@ -33,8 +33,11 @@ services:
     ports:
       - "127.0.0.1:${C7_PICS_WEB_HOST_PORT:-3000}:3000"
 
-  # Disable Caddy: the host's /etc/caddy/Caddyfile is authoritative.
+  # Caddy is excluded from shared-host via profiles.
+  # The host's /etc/caddy/Caddyfile is authoritative.
   caddy:
+    profiles:
+      - dedicated-edge
     deploy:
       replicas: 0
 

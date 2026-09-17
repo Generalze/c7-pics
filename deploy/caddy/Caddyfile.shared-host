@@ -1,0 +1,79 @@
+# C7-PICS Caddy configuration for shared c7-eu-01 host
+#
+# This snippet is added to /etc/caddy/Caddyfile on the host.
+# It proxies https://pics.consummate7.com to C7-PICS web and API services
+# running in Docker on loopback (127.0.0.1:3000 and 127.0.0.1:4000).
+#
+# The host's system Caddy is authoritative for ports 80/443.
+# C7-PICS containers do NOT run Caddy.
+
+pics.consummate7.com {
+	encode zstd gzip
+
+	log {
+		output file /var/log/caddy/c7-pics.log
+		format json
+	}
+
+	# --- Health check endpoint ---
+	@health path /healthz
+	handle @health {
+		reverse_proxy 127.0.0.1:4000 {
+			uri /health
+		}
+	}
+
+	# --- Realtime gateway (Socket.IO) ---
+	@realtime path /socket.io/*
+	handle @realtime {
+		reverse_proxy 127.0.0.1:4000 {
+			# WebSocket upgrade and long polling for realtime.
+			header_up Connection *
+			header_up Upgrade *
+
+			# Preserve client IP for analytics and abuse detection.
+			header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {http.request.host}
+
+			# Socket.IO needs these timeouts to match backend configuration.
+			# Default Caddy timeouts are insufficient for long polling and
+			# the realtime connection state recovery window.
+			# Read/write: 120s (match REALTIME_CONNECTION_STATE_RECOVERY_MS)
+			# Idle: match backend ping interval (~30s)
+			timeout 120s
+			idle_timeout 150s
+		}
+	}
+
+	# --- API prefix (strip /api) ---
+	@api path /api/*
+	handle @api {
+		reverse_proxy 127.0.0.1:4000 {
+			uri strip_prefix /api
+
+			header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {http.request.host}
+
+			# API request body ceiling (match backend validation).
+			# Set in backend .env; Caddy enforces upstream.
+		}
+	}
+
+	# --- Everything else -> web SPA ---
+	handle /* {
+		reverse_proxy 127.0.0.1:3000 {
+			header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {http.request.host}
+		}
+	}
+
+	# --- Security headers ---
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+	header X-Content-Type-Options "nosniff"
+	header X-Frame-Options "DENY"
+	header Referrer-Policy "no-referrer-when-downgrade"
+	header -Server
+}

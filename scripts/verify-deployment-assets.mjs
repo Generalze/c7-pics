@@ -420,8 +420,33 @@ if (!deploymentRunbook.includes("Verify LOCAL health") && !deploymentRunbook.inc
 if (!deploymentRunbook.includes("caddy validate") || !deploymentRunbook.includes("caddy reload")) {
   failures.push("DEPLOYMENT_SHARED_HOST.md must document actual Caddy parser validation (caddy validate) before reload.");
 }
-if (!deploymentRunbook.includes("docker compose") || !deploymentRunbook.includes("--env-file /etc/pics/production.env")) {
-  failures.push("DEPLOYMENT_SHARED_HOST.md must pass --env-file /etc/pics/production.env to all docker compose commands (build, activation, rollback).");
+
+if (!deploymentRunbook.includes("profiles:") || !deploymentRunbook.includes("dedicated-edge")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document Caddy profile (profiles: [dedicated-edge]) as primary exclusion mechanism.");
+}
+
+// Verify build command includes env-file
+if (!deploymentRunbook.slice(deploymentRunbook.indexOf("# 5. Build") || 0, deploymentRunbook.indexOf("# 6.") || Infinity).includes("--env-file /etc/pics/production.env")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md build command (step 5) must include --env-file /etc/pics/production.env for Compose interpolation.");
+}
+
+// Verify activation/up command includes env-file
+if (!deploymentRunbook.slice(deploymentRunbook.indexOf("# 6. Start") || 0, deploymentRunbook.indexOf("# 7.") || Infinity).includes("--env-file /etc/pics/production.env")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md activation command (step 6) must include --env-file /etc/pics/production.env.");
+}
+
+// Verify rollback command includes env-file
+if (!deploymentRunbook.slice(deploymentRunbook.indexOf("### Rollback") || 0, deploymentRunbook.indexOf("### Post-Deployment") || Infinity).includes("--env-file /etc/pics/production.env")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md rollback command must include --env-file /etc/pics/production.env for re-activation.");
+}
+
+// Verify operational logs and database commands use shared-host override and env
+const operationalSection = deploymentRunbook.slice(deploymentRunbook.indexOf("### Post-Deployment") || 0);
+if (!operationalSection.includes("docker compose -f docker-compose.prod.yml -f deploy/docker-compose.shared-host.yml --env-file /etc/pics/production.env logs")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md post-deployment logs command must use shared-host override and env-file.");
+}
+if (!operationalSection.includes("docker compose -f docker-compose.prod.yml -f deploy/docker-compose.shared-host.yml --env-file /etc/pics/production.env exec")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md post-deployment exec/database command must use shared-host override and env-file.");
 }
 
 if (failures.length > 0) {

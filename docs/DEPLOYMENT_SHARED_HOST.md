@@ -30,15 +30,17 @@ Private S3 (external)
 
 ### 1. No Container Caddy
 
-The host's `/etc/caddy/Caddyfile` is authoritative. Container Caddy is **disabled**:
+The host's `/etc/caddy/Caddyfile` is authoritative. Container Caddy is **disabled** via profile exclusion (primary mechanism) and replicas: 0 (defense-in-depth):
 
 ```yaml
 caddy:
+  profiles:
+    - dedicated-edge
   deploy:
     replicas: 0
 ```
 
-**Why:** One reverse proxy per host. Conflicts with videofy's host Caddy.
+**Why:** One reverse proxy per host. Conflicts with videofy's host Caddy. The `dedicated-edge` profile ensures Caddy is not selected by default; `replicas: 0` prevents accidental startup if the profile is ever included.
 
 ### 2. Loopback-Only Application Ports
 
@@ -302,13 +304,13 @@ curl https://pics.consummate7.com/healthz
 ssh c7-claude 'docker ps | grep c7-pics'
 
 # Application logs (from current release)
-ssh c7-claude 'cd /srv/pics/current && docker compose -f docker-compose.prod.yml logs -f api'
+ssh c7-claude 'cd /srv/pics/current && docker compose -f docker-compose.prod.yml -f deploy/docker-compose.shared-host.yml --env-file /etc/pics/production.env logs -f api'
 
 # Caddy access logs
 ssh c7-claude 'tail -f /var/log/caddy/c7-pics.log | jq .'
 
 # Database health (from current release)
-ssh c7-claude 'cd /srv/pics/current && docker compose -f docker-compose.prod.yml exec postgres psql -U $POSTGRES_USER -d ogun_production -c "SELECT NOW();"'
+ssh c7-claude 'cd /srv/pics/current && docker compose -f docker-compose.prod.yml -f deploy/docker-compose.shared-host.yml --env-file /etc/pics/production.env exec postgres psql -U $POSTGRES_USER -d ogun_production -c "SELECT NOW();"'
 ```
 
 ## Object Storage (S3) Readiness

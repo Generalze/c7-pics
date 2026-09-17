@@ -381,6 +381,9 @@ if (sharedHostCompose.includes('"5432:5432"') || sharedHostCompose.includes('"63
     sharedHostCompose.includes("5432:5432") || sharedHostCompose.includes("6379:6379")) {
   failures.push("Shared-host override must not publish postgres or redis to the host.");
 }
+if (!sharedHostCompose.includes("profiles:") || !sharedHostCompose.includes("dedicated-edge")) {
+  failures.push("Shared-host override must disable Caddy via profiles: [dedicated-edge].");
+}
 if (!sharedHostCompose.includes("deploy:") || !sharedHostCompose.includes("replicas: 0")) {
   failures.push("Shared-host override must disable Caddy container (replicas: 0).");
 }
@@ -389,6 +392,33 @@ if (!sharedHostCompose.includes("TURN_PORT") || !sharedHostCompose.includes("347
 }
 if (!sharedHostCompose.includes("TURN_MIN_PORT") || !sharedHostCompose.includes("49301")) {
   failures.push("Shared-host override must configure separate TURN relay range (49301-49400).");
+}
+
+// Shared-host deployment runbook validations
+const deploymentRunbook = contents.get("docs/DEPLOYMENT_SHARED_HOST.md") || "";
+if (!deploymentRunbook.includes("/srv/pics/releases/")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document immutable release paths (/srv/pics/releases/<sha>).");
+}
+if (!deploymentRunbook.includes("/srv/pics/current")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document atomic symlink switch (/srv/pics/current).");
+}
+if (deploymentRunbook.includes("/srv/pics/app")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md contains stale mutable /srv/pics/app paths; replace with /srv/pics/current or /srv/pics/releases/<sha>.");
+}
+if (!deploymentRunbook.includes("IMAGE_TAG")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document SHA-based IMAGE_TAG activation for Docker image reproducibility.");
+}
+if (!deploymentRunbook.includes("ln -s /etc/pics/production.env") || !deploymentRunbook.includes(".env.production")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document .env.production symlink linking to /etc/pics/production.env.");
+}
+if (!deploymentRunbook.includes("IMAGE_TAG=") || !deploymentRunbook.slice(deploymentRunbook.indexOf("Rollback") || 0).includes("IMAGE_TAG")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md rollback procedure must re-activate with IMAGE_TAG=$PREVIOUS_SHA.");
+}
+if (!deploymentRunbook.includes("Verify LOCAL health") && !deploymentRunbook.includes("127.0.0.1:4000/health")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must verify LOCAL loopback health before switching /srv/pics/current.");
+}
+if (!deploymentRunbook.includes("caddy validate") || !deploymentRunbook.includes("caddy reload")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document actual Caddy parser validation (caddy validate) before reload.");
 }
 
 if (failures.length > 0) {

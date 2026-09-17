@@ -160,32 +160,56 @@ ssh c7-claude bash -c '
   cd "$RELEASE"
   git checkout --detach "$TARGET_SHA"
   
-  # Verify
+  # Verify SHA integrity
   test "$(git rev-parse HEAD)" = "$TARGET_SHA" || exit 1
   test -z "$(git status --short)" || exit 1
   
-  # Install and build
+  # Link production env to external secret
+  ln -s /etc/pics/production.env "$RELEASE/.env.production"
+  test -L "$RELEASE/.env.production" || exit 1
+  test "$(readlink -f "$RELEASE/.env.production")" = "/etc/pics/production.env" || exit 1
+  
+  # Install dependencies
   npm ci
   npm run build
 '
 
-# 5. Start services
+# 5. Build SHA-tagged Docker images
 ssh c7-claude bash -c '
   TARGET_SHA="'"${TARGET_SHA}"'"
   RELEASE=/srv/pics/releases/$TARGET_SHA
   
   cd "$RELEASE"
-  docker compose \
+  IMAGE_TAG="$TARGET_SHA" docker compose \
     -f docker-compose.prod.yml \
     -f deploy/docker-compose.shared-host.yml \
-    --env-file /etc/pics/production.env \
+    build
+'
+
+# 6. Start services with SHA-tagged images
+ssh c7-claude bash -c '
+  TARGET_SHA="'"${TARGET_SHA}"'"
+  RELEASE=/srv/pics/releases/$TARGET_SHA
+  
+  cd "$RELEASE"
+  IMAGE_TAG="$TARGET_SHA" docker compose \
+    -f docker-compose.prod.yml \
+    -f deploy/docker-compose.shared-host.yml \
     up -d
 '
 
-# 6. Health check
-ssh c7-claude 'curl -f https://pics.consummate7.com/healthz || exit 1'
+# 7. Verify LOCAL health (loopback)
+ssh c7-claude bash -c '
+  # Wait for services to be healthy
+  for i in {1..30}; do
+    curl -s http://127.0.0.1:4000/health >/dev/null && break
+    sleep 1
+  done
+  curl -f http://127.0.0.1:4000/health || exit 1
+  curl -f http://127.0.0.1:3000 > /dev/null || exit 1
+'
 
-# 7. Atomic pointer switch
+# 8. Atomic pointer switch (after LOCAL health confirmed)
 ssh c7-claude bash -c '
   TARGET_SHA="'"${TARGET_SHA}"'"
   RELEASE=/srv/pics/releases/$TARGET_SHA
@@ -198,30 +222,71 @@ ssh c7-claude bash -c '
   test "$(readlink /srv/pics/current)" = "$RELEASE" || exit 1
 '
 
-# 8. Public smoke test
-curl -f https://pics.consummate7.com/
-curl -f https://pics.consummate7.com/healthz
+# 9. Install/reload host Caddy (first deployment only)
+# Skip this step if Caddy site for C7-PICS already exists in /etc/caddy/Caddyfile
+ssh c7-claude bash -c '
+  # Backup existing Caddyfile
+  sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.backup.$(date +%s)
+  
+  # Add C7-PICS block from deploy/caddy/Caddyfile.shared-host
+  # (Operator must manually append the block to /etc/caddy/Caddyfile)
+  
+  # Validate and reload
+  sudo caddy validate --config /etc/caddy/Caddyfile
+  sudo caddy reload --config /etc/caddy/Caddyfile
+'
+
+# 10. Public smoke test (after Caddy reload)
+curl -f https://pics.consummate7.com/healthz || exit 1
+curl -f https://pics.consummate7.com/ > /dev/null || exit 1
 ```
 
 ### Rollback
 
-```bash
-# Switch /srv/pics/current back to the previous release
-PREVIOUS_RELEASE="/srv/pics/releases/<previous-sha>"
-ssh c7-claude bash -c '
-  ln -sfn '"${PREVIOUS_RELEASE}"' /srv/pics/current.tmp
-  mv -Tf /srv/pics/current.tmp /srv/pics/current
-'
+Rollback must re-activate the previous release with its exact image versions. Switching the symlink alone will NOT change running containers if images are missing the old tag.
 
-# Restart services
+```bash
+PREVIOUS_SHA="<previous approved sha>"
+PREVIOUS_RELEASE="/srv/pics/releases/$PREVIOUS_SHA"
+
+# 1. Re-activate previous release containers with IMAGE_TAG
 ssh c7-claude bash -c '
-  cd /srv/pics/current
-  docker compose \
+  PREVIOUS_SHA="'"${PREVIOUS_SHA}"'"
+  PREVIOUS_RELEASE=/srv/pics/releases/$PREVIOUS_SHA
+  
+  cd "$PREVIOUS_RELEASE"
+  IMAGE_TAG="$PREVIOUS_SHA" docker compose \
     -f docker-compose.prod.yml \
     -f deploy/docker-compose.shared-host.yml \
-    --env-file /etc/pics/production.env \
-    restart api web worker
+    up -d
 '
+
+# 2. Verify LOCAL health with previous version
+ssh c7-claude bash -c '
+  for i in {1..30}; do
+    curl -s http://127.0.0.1:4000/health >/dev/null && break
+    sleep 1
+  done
+  curl -f http://127.0.0.1:4000/health || exit 1
+'
+
+# 3. Atomic pointer switch back
+ssh c7-claude bash -c '
+  PREVIOUS_SHA="'"${PREVIOUS_SHA}"'"
+  PREVIOUS_RELEASE=/srv/pics/releases/$PREVIOUS_SHA
+  
+  ln -sfn "$PREVIOUS_RELEASE" /srv/pics/current.tmp
+  mv -Tf /srv/pics/current.tmp /srv/pics/current
+  
+  test "$(readlink /srv/pics/current)" = "$PREVIOUS_RELEASE" || exit 1
+'
+
+# 4. Public smoke test
+curl -f https://pics.consummate7.com/healthz || exit 1
+curl -f https://pics.consummate7.com/ > /dev/null || exit 1
+
+# Database rollback compatibility: consult migration design for backward compatibility rules.
+# Do not automatically destroy the failed release or its database.
 ```
 
 ### Post-Deployment Verification
@@ -231,10 +296,16 @@ ssh c7-claude bash -c '
 curl https://pics.consummate7.com/healthz
 
 # Container status
-ssh c7-claude 'docker compose -f /srv/pics/app/docker-compose.prod.yml ps'
+ssh c7-claude 'docker ps | grep c7-pics'
 
-# Logs
-ssh c7-claude 'docker compose -f /srv/pics/app/docker-compose.prod.yml logs -f api'
+# Application logs (from current release)
+ssh c7-claude 'cd /srv/pics/current && docker compose -f docker-compose.prod.yml logs -f api'
+
+# Caddy access logs
+ssh c7-claude 'tail -f /var/log/caddy/c7-pics.log | jq .'
+
+# Database health (from current release)
+ssh c7-claude 'cd /srv/pics/current && docker compose -f docker-compose.prod.yml exec postgres psql -U $POSTGRES_USER -d ogun_production -c "SELECT NOW();"'
 ```
 
 ## Object Storage (S3) Readiness
@@ -289,51 +360,6 @@ PROBE_OBJECT="voter-verification/pending/predeploy-probe-${TIMESTAMP}.txt"
 Only after these pass should `npm run deploy:migrate` be run.
 
 **Important:** The probe object uses the `voter-verification/pending/` namespace, which matches the bucket policy grant for application deletion. Do NOT use arbitrary test namespaces outside the application's custody model.
-
-## Rollback
-
-If deployment fails before services are healthy:
-
-```bash
-ssh c7-claude bash -c '
-  cd /srv/pics/app
-  git checkout <previous-known-good-sha>
-  docker compose -f docker-compose.prod.yml -f deploy/docker-compose.shared-host.yml down
-'
-```
-
-If deployment succeeds but application has issues:
-
-```bash
-ssh c7-claude bash -c '
-  cd /srv/pics/app
-  docker compose -f docker-compose.prod.yml -f deploy/docker-compose.shared-host.yml stop api web
-  # Debug...
-  docker compose ... up -d
-'
-```
-
-## Monitoring
-
-**Docker container status:**
-```bash
-ssh c7-claude 'docker ps | grep c7-pics'
-```
-
-**Application logs:**
-```bash
-ssh c7-claude 'docker compose -f /srv/pics/app/docker-compose.prod.yml logs -f api'
-```
-
-**Caddy access logs:**
-```bash
-ssh c7-claude 'tail -f /var/log/caddy/c7-pics.log | jq .'
-```
-
-**Database:**
-```bash
-ssh c7-claude 'docker compose -f /srv/pics/app/docker-compose.prod.yml exec postgres psql -U $POSTGRES_USER -d ogun_production -c "SELECT NOW();"'
-```
 
 ## Network Isolation
 

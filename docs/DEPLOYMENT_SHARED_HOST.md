@@ -174,7 +174,7 @@ ssh c7-claude bash -c '
   npm run build
 '
 
-# 5. Build SHA-tagged Docker images
+# 5. Build SHA-tagged Docker images (with external env for interpolation)
 ssh c7-claude bash -c '
   TARGET_SHA="'"${TARGET_SHA}"'"
   RELEASE=/srv/pics/releases/$TARGET_SHA
@@ -183,6 +183,7 @@ ssh c7-claude bash -c '
   IMAGE_TAG="$TARGET_SHA" docker compose \
     -f docker-compose.prod.yml \
     -f deploy/docker-compose.shared-host.yml \
+    --env-file /etc/pics/production.env \
     build
 '
 
@@ -195,6 +196,7 @@ ssh c7-claude bash -c '
   IMAGE_TAG="$TARGET_SHA" docker compose \
     -f docker-compose.prod.yml \
     -f deploy/docker-compose.shared-host.yml \
+    --env-file /etc/pics/production.env \
     up -d
 '
 
@@ -258,6 +260,7 @@ ssh c7-claude bash -c '
   IMAGE_TAG="$PREVIOUS_SHA" docker compose \
     -f docker-compose.prod.yml \
     -f deploy/docker-compose.shared-host.yml \
+    --env-file /etc/pics/production.env \
     up -d
 '
 

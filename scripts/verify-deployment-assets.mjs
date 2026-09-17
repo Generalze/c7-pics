@@ -420,6 +420,9 @@ if (!deploymentRunbook.includes("Verify LOCAL health") && !deploymentRunbook.inc
 if (!deploymentRunbook.includes("caddy validate") || !deploymentRunbook.includes("caddy reload")) {
   failures.push("DEPLOYMENT_SHARED_HOST.md must document actual Caddy parser validation (caddy validate) before reload.");
 }
+if (!deploymentRunbook.includes("docker compose") || !deploymentRunbook.includes("--env-file /etc/pics/production.env")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must pass --env-file /etc/pics/production.env to all docker compose commands (build, activation, rollback).");
+}
 
 if (failures.length > 0) {
   for (const failure of failures) {

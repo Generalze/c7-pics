@@ -121,8 +121,18 @@ coturn:
 
 3. Production environment secrets:
    ```bash
-   sudo touch /etc/pics/production.env
-   sudo chmod 600 /etc/pics/production.env
+   # Create with correct ownership (claude:videofy) and permissions (600)
+   sudo install \
+     -o claude \
+     -g videofy \
+     -m 600 \
+     /dev/null \
+     /etc/pics/production.env
+
+   # Verify ownership and permissions
+   stat -c '%U %G %a %n' /etc/pics/production.env
+   # Expected output: claude videofy 600 /etc/pics/production.env
+
    # Operator fills in all STORAGE_*, TURN_*, DATABASE_*, JWT_* secrets
    ```
 
@@ -310,7 +320,7 @@ ssh c7-claude 'cd /srv/pics/current && docker compose -f docker-compose.prod.yml
 ssh c7-claude 'tail -f /var/log/caddy/c7-pics.log | jq .'
 
 # Database health (from current release)
-ssh c7-claude 'cd /srv/pics/current && docker compose -f docker-compose.prod.yml -f deploy/docker-compose.shared-host.yml --env-file /etc/pics/production.env exec postgres psql -U $POSTGRES_USER -d ogun_production -c "SELECT NOW();"'
+ssh c7-claude 'cd /srv/pics/current && docker compose -f docker-compose.prod.yml -f deploy/docker-compose.shared-host.yml --env-file /etc/pics/production.env exec postgres sh -lc "psql -U \"\$POSTGRES_USER\" -d \"\${POSTGRES_DB:-ogun_production}\" -c \"SELECT NOW();\""'
 ```
 
 ## Object Storage (S3) Readiness

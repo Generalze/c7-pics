@@ -449,6 +449,23 @@ if (!operationalSection.includes("docker compose -f docker-compose.prod.yml -f d
   failures.push("DEPLOYMENT_SHARED_HOST.md post-deployment exec/database command must use shared-host override and env-file.");
 }
 
+// Verify env file ownership procedure (not loose touch)
+const preDeploySection = deploymentRunbook.slice(deploymentRunbook.indexOf("### Pre-Deployment") || 0, deploymentRunbook.indexOf("### Deployment Command") || Infinity);
+if (!preDeploySection.includes("install") || !preDeploySection.includes("-o claude")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must create production.env with 'install' and owner 'claude' for deployment account access.");
+}
+if (!preDeploySection.includes("-g videofy") || !preDeploySection.includes("-m 600")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must create production.env with group 'videofy' and permissions '600'.");
+}
+if (!preDeploySection.includes("stat -c '%U %G %a %n'") || !preDeploySection.includes("claude videofy 600")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must verify env file ownership and permissions with stat command.");
+}
+
+// Verify database health command uses shell variable expansion
+if (!operationalSection.includes("sh -lc") || !operationalSection.includes("$POSTGRES_USER")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md database health command must use 'sh -lc' to expand $POSTGRES_USER inside the container, not on the host.");
+}
+
 if (failures.length > 0) {
   for (const failure of failures) {
     console.error(`FAIL ${failure}`);

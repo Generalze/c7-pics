@@ -107,8 +107,15 @@ coturn:
 1. Create directory structure (immutable releases model):
    ```bash
    sudo mkdir -p /srv/pics/releases /srv/pics/backups /etc/pics
-   sudo chown claude:videofy /srv/pics/releases /srv/pics/backups
+
+   # Deployment account must be able to create and atomically replace
+   # /srv/pics/current.tmp and /srv/pics/current symlinks
+   sudo chown claude:videofy /srv/pics /srv/pics/releases /srv/pics/backups
+   sudo chmod 755 /srv/pics /srv/pics/releases /srv/pics/backups
+
    sudo chown videofy:videofy /etc/pics
+   sudo chmod 755 /etc/pics
+
    # /srv/pics/current is a symlink, created during first deployment
    ```
 

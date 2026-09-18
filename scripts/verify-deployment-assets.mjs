@@ -399,6 +399,9 @@ if (!sharedHostCompose.includes("TURN_MIN_PORT") || !sharedHostCompose.includes(
 
 // Shared-host deployment runbook validations
 const deploymentRunbook = contents.get("docs/DEPLOYMENT_SHARED_HOST.md") || "";
+if (!deploymentRunbook.includes("sudo chown claude:videofy /srv/pics")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must assign claude:videofy ownership to /srv/pics itself (not just child directories) to enable atomic symlink creation.");
+}
 if (!deploymentRunbook.includes("/srv/pics/releases/")) {
   failures.push("DEPLOYMENT_SHARED_HOST.md must document immutable release paths (/srv/pics/releases/<sha>).");
 }

@@ -381,6 +381,8 @@ if (policyText) {
   try {
     const policy = JSON.parse(policyText);
     let hasVersionDeleteGrant = false;
+    let hasConditionalWriteEnforcement = false;
+    let hasLifecycleMutationDeny = false;
 
     for (const statement of policy.Statement || []) {
       if (
@@ -392,11 +394,40 @@ if (policyText) {
           hasVersionDeleteGrant = true;
         }
       }
+
+      if (
+        statement.Sid === "DenyApplicationUnconditionalObjectWrites" &&
+        statement.Effect === "Deny" &&
+        statement.Action === "s3:PutObject" &&
+        statement.Condition?.Null?.["s3:if-none-match"] === "true"
+      ) {
+        hasConditionalWriteEnforcement = true;
+      }
+
+      if (
+        statement.Sid === "DenyApplicationLifecycleMutation" &&
+        statement.Effect === "Deny" &&
+        statement.Action === "s3:PutLifecycleConfiguration"
+      ) {
+        hasLifecycleMutationDeny = true;
+      }
     }
 
     if (!hasVersionDeleteGrant) {
       failures.push(
         "deploy/storage/bucket-policy.json must grant s3:DeleteObjectVersion for the pending namespace to support versioned-bucket deletion.",
+      );
+    }
+
+    if (!hasConditionalWriteEnforcement) {
+      failures.push(
+        "deploy/storage/bucket-policy.json must enforce conditional writes (If-None-Match) for application PutObject to prevent credential-based overwrite attacks.",
+      );
+    }
+
+    if (!hasLifecycleMutationDeny) {
+      failures.push(
+        "deploy/storage/bucket-policy.json must deny application PutLifecycleConfiguration to prevent lifecycle-based object deletion bypasses.",
       );
     }
   } catch {

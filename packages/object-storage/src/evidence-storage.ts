@@ -297,40 +297,48 @@ export class S3CompatibleEvidenceObjectStorage implements EvidenceObjectStorage 
     };
   }
 
-  private async getObjectVersionId(key: string): Promise<string | null> {
+  private async getObjectVersionState(
+    key: string,
+  ): Promise<{ exists: boolean; versionId: string | null }> {
     // On a versioned bucket, HEAD returns the current version ID in x-amz-version-id.
     // This allows us to delete the exact version rather than just creating a delete marker.
+    // Distinguish three outcomes:
+    // 1. HEAD 404: object does not exist
+    // 2. HEAD 2xx with x-amz-version-id: versioned store with current version ID
+    // 3. HEAD 2xx without x-amz-version-id: unversioned S3-compatible store
     const url = this.objectUrl(key);
     const headers = this.authHeaders("HEAD", url, Buffer.alloc(0), {});
     const result = await fetch(url, { method: "HEAD", headers });
 
     if (result.status === 404) {
-      return null;
+      return { exists: false, versionId: null };
     }
     if (!result.ok) {
       throw new Error(`S3-compatible object version lookup failed with HTTP ${result.status}.`);
     }
 
     const versionId = result.headers.get("x-amz-version-id");
-    return versionId || null;
+    return { exists: true, versionId: versionId || null };
   }
 
   async deleteObjectUnchecked(key: string): Promise<void> {
-    const versionId = await this.getObjectVersionId(key);
+    const state = await this.getObjectVersionState(key);
 
-    // 404 during HEAD means the object is already absent; that's success.
-    if (versionId === null) {
+    // Object does not exist; nothing to delete.
+    if (!state.exists) {
       return;
     }
 
     const url = this.objectUrl(key);
+
     // If the provider returned a version ID, include it in the DELETE request.
     // This ensures the exact version is deleted on a versioned bucket,
     // rather than just creating a delete marker.
-    if (versionId) {
-      url.searchParams.set("versionId", versionId);
+    if (state.versionId !== null) {
+      url.searchParams.set("versionId", state.versionId);
     }
 
+    // Sign the DELETE request with the final URL (including versionId if present).
     const headers = this.authHeaders("DELETE", url, Buffer.alloc(0), {});
     const result = await fetch(url, { method: "DELETE", headers });
 

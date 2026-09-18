@@ -207,17 +207,60 @@ for (const file of files) {
 
 /* ---- S3 deletion is version-aware on versioned buckets -------------------- */
 
-if (!storageText.includes("getObjectVersionId")) {
-  failures.push(`${storageRelative}: S3 deletion must be version-aware via getObjectVersionId.`);
+if (!storageText.includes("getObjectVersionState")) {
+  failures.push(
+    `${storageRelative}: S3 deletion must distinguish HEAD outcomes via getObjectVersionState.`,
+  );
+}
+
+if (!storageText.includes("status === 404")) {
+  failures.push(
+    `${storageRelative}: getObjectVersionState must distinguish HEAD 404 (object absent).`,
+  );
 }
 
 if (!storageText.includes("x-amz-version-id")) {
-  failures.push(`${storageRelative}: version-aware deletion must read x-amz-version-id from HEAD response.`);
+  failures.push(`${storageRelative}: deletion must read x-amz-version-id header from HEAD response.`);
 }
 
-if (!storageText.includes("versionId")) {
+if (!storageText.includes("{ exists: false")) {
   failures.push(
-    `${storageRelative}: version-aware deletion must include versionId in the DELETE request for versioned buckets.`,
+    `${storageRelative}: getObjectVersionState must return {exists: false} for HEAD 404.`,
+  );
+}
+
+if (!storageText.includes("{ exists: true")) {
+  failures.push(
+    `${storageRelative}: getObjectVersionState must return {exists: true} for HEAD 2xx.`,
+  );
+}
+
+if (!storageText.match(/deleteObjectUnchecked[\s\S]*?getObjectVersionState/)) {
+  failures.push(`${storageRelative}: deleteObjectUnchecked must call getObjectVersionState.`);
+}
+
+if (!storageText.includes("!state.exists")) {
+  failures.push(
+    `${storageRelative}: deleteObjectUnchecked must return early if object does not exist.`,
+  );
+}
+
+if (!storageText.includes("state.versionId !== null")) {
+  failures.push(
+    `${storageRelative}: deleteObjectUnchecked must check state.versionId to conditionally add query param.`,
+  );
+}
+
+if (!storageText.includes('searchParams.set("versionId"')) {
+  failures.push(
+    `${storageRelative}: deleteObjectUnchecked must add versionId to query string when present.`,
+  );
+}
+
+// Verify signing happens after versionId is added to URL: searchParams must come before authHeaders
+if (!storageText.match(/searchParams\.set\("versionId"[\s\S]*?authHeaders\("DELETE"/)) {
+  failures.push(
+    `${storageRelative}: DELETE must be signed AFTER versionId is added to URL, not before.`,
   );
 }
 
@@ -377,8 +420,16 @@ if (storageReadme) {
       "deploy/storage/README.md must document NoncurrentVersionExpiration for versioned buckets. Expiration alone leaves object versions behind.",
     );
   }
+  if (!storageReadme.includes("ExpiredObjectDeleteMarker")) {
+    failures.push(
+      "deploy/storage/README.md must document ExpiredObjectDeleteMarker cleanup to remove delete markers after versions are gone.",
+    );
+  }
   if (!storageReadme.includes("x-amz-version-id")) {
     failures.push("deploy/storage/README.md must explain version-aware deletion via x-amz-version-id.");
+  }
+  if (!storageReadme.includes("HEAD request") && !storageReadme.includes("HEAD retrieves")) {
+    failures.push("deploy/storage/README.md must explain the HEAD request for version-aware deletion.");
   }
   if (!storageReadme.includes("Object Lock")) {
     failures.push(

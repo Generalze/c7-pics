@@ -67,6 +67,11 @@ A pending object is normally removed within the same request, either by
 promotion or by cleanup. A lifecycle rule is the backstop for the case where the
 process dies between the two.
 
+**Important:** On a versioned bucket, `Expiration` alone creates a delete marker
+but leaves noncurrent versions behind. A complete pending-object lifecycle
+requires three layers: current-version expiration, noncurrent-version cleanup,
+and expired-delete-marker removal.
+
 ```json
 {
   "Rules": [
@@ -74,7 +79,14 @@ process dies between the two.
       "ID": "expire-uncommitted-registration-objects",
       "Status": "Enabled",
       "Filter": { "Prefix": "voter-verification/pending/" },
-      "Expiration": { "Days": 1 }
+      "Expiration": { "Days": 1 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 1 }
+    },
+    {
+      "ID": "remove-expired-pending-delete-markers",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "voter-verification/pending/" },
+      "Expiration": { "ExpiredObjectDeleteMarker": true }
     }
   ]
 }
@@ -83,6 +95,24 @@ process dies between the two.
 It must carry that prefix. A lifecycle rule without a filter, or with a broader
 one, would put an expiry date on permanent election evidence — which is the
 thing this bucket exists to prevent.
+
+**How it works:**
+- `Expiration: { Days: 1 }`: Removes the current version after 1 day of inactivity, creating a delete marker.
+- `NoncurrentVersionExpiration: { NoncurrentDays: 1 }`: Removes all noncurrent versions after 1 day, ensuring no version remains archived.
+- `Expiration: { ExpiredObjectDeleteMarker: true }`: Removes the delete marker once all versions are gone (reduces metadata clutter).
+- Application cleanup is expected to delete the exact version immediately via `versionId` query parameter.
+- The lifecycle rule is only a backstop for process crashes; it is not the primary deletion mechanism.
+
+**Version-aware deletion:**
+
+The application retrieves the current version ID via a HEAD request (`x-amz-version-id` header)
+and includes it in the DELETE request to remove the exact version rather than creating a delete marker.
+On versioned buckets, this ensures deleted pending objects are not left behind as noncurrent versions.
+
+**Important distinction:**
+- A delete marker is metadata that indicates an object was deleted, not the bytes themselves.
+- `Expiration: { ExpiredObjectDeleteMarker: true }` removes the marker, freeing storage.
+- This rule only applies after all underlying versions have already been removed by `NoncurrentVersionExpiration`.
 
 ```bash
 sed -e "s|BUCKET_NAME|$STORAGE_BUCKET|g" \
@@ -96,6 +126,27 @@ aws s3api put-bucket-policy --bucket "$STORAGE_BUCKET" --policy file:///tmp/buck
 On MinIO and other S3-compatible providers the policy grammar differs. The
 requirements that must hold regardless of syntax are: no anonymous read, TLS
 required, and delete separated from the application identity.
+
+## Object Lock Configuration
+
+**Important:** Do NOT enable a default bucket-wide retention policy.
+
+Object Lock in governance mode provides evidence immutability for committed
+objects, but a global retention policy would make pending objects undeletable.
+Pending objects must remain deletable to support transaction rollback.
+
+If Object Lock is enabled:
+1. Enable governance mode (not compliance mode)
+2. Do NOT set a default retention policy on all objects
+3. Do NOT enable automatic retention on object uploads
+4. Committed-object retention may be configured later with an explicit design
+   that does not affect the pending namespace
+
+Currently, immutability is enforced by:
+- Application code boundary (only `discardPendingObject` can delete)
+- IAM/bucket policy boundary (DELETE operations scoped to pending namespace)
+- Versioning (allowing historical recovery if an object is overwritten)
+- Separate custodian authority (delete operations outside pending namespace)
 
 ## Verifying it
 

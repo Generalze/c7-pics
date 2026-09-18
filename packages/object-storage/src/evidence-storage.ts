@@ -297,11 +297,53 @@ export class S3CompatibleEvidenceObjectStorage implements EvidenceObjectStorage 
     };
   }
 
-  async deleteObjectUnchecked(key: string): Promise<void> {
+  private async getObjectVersionState(
+    key: string,
+  ): Promise<{ exists: boolean; versionId: string | null }> {
+    // On a versioned bucket, HEAD returns the current version ID in x-amz-version-id.
+    // This allows us to delete the exact version rather than just creating a delete marker.
+    // Distinguish three outcomes:
+    // 1. HEAD 404: object does not exist
+    // 2. HEAD 2xx with x-amz-version-id: versioned store with current version ID
+    // 3. HEAD 2xx without x-amz-version-id: unversioned S3-compatible store
     const url = this.objectUrl(key);
+    const headers = this.authHeaders("HEAD", url, Buffer.alloc(0), {});
+    const result = await fetch(url, { method: "HEAD", headers });
+
+    if (result.status === 404) {
+      return { exists: false, versionId: null };
+    }
+    if (!result.ok) {
+      throw new Error(`S3-compatible object version lookup failed with HTTP ${result.status}.`);
+    }
+
+    const versionId = result.headers.get("x-amz-version-id");
+    return { exists: true, versionId: versionId || null };
+  }
+
+  async deleteObjectUnchecked(key: string): Promise<void> {
+    const state = await this.getObjectVersionState(key);
+
+    // Object does not exist; nothing to delete.
+    if (!state.exists) {
+      return;
+    }
+
+    const url = this.objectUrl(key);
+
+    // If the provider returned a version ID, include it in the DELETE request.
+    // This ensures the exact version is deleted on a versioned bucket,
+    // rather than just creating a delete marker.
+    if (state.versionId !== null) {
+      url.searchParams.set("versionId", state.versionId);
+    }
+
+    // Sign the DELETE request with the final URL (including versionId if present).
     const headers = this.authHeaders("DELETE", url, Buffer.alloc(0), {});
     const result = await fetch(url, { method: "DELETE", headers });
-    // 404 is success for our purpose: the object is not there.
+
+    // 404 is success: in the unlikely event the object was deleted between HEAD and DELETE,
+    // we've still accomplished the goal.
     if (!result.ok && result.status !== 404) {
       throw new Error(`S3-compatible object delete failed with HTTP ${result.status}.`);
     }

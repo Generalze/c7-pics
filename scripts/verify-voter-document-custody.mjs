@@ -205,6 +205,65 @@ for (const file of files) {
   }
 }
 
+/* ---- S3 deletion is version-aware on versioned buckets -------------------- */
+
+if (!storageText.includes("getObjectVersionState")) {
+  failures.push(
+    `${storageRelative}: S3 deletion must distinguish HEAD outcomes via getObjectVersionState.`,
+  );
+}
+
+if (!storageText.includes("status === 404")) {
+  failures.push(
+    `${storageRelative}: getObjectVersionState must distinguish HEAD 404 (object absent).`,
+  );
+}
+
+if (!storageText.includes("x-amz-version-id")) {
+  failures.push(`${storageRelative}: deletion must read x-amz-version-id header from HEAD response.`);
+}
+
+if (!storageText.includes("{ exists: false")) {
+  failures.push(
+    `${storageRelative}: getObjectVersionState must return {exists: false} for HEAD 404.`,
+  );
+}
+
+if (!storageText.includes("{ exists: true")) {
+  failures.push(
+    `${storageRelative}: getObjectVersionState must return {exists: true} for HEAD 2xx.`,
+  );
+}
+
+if (!storageText.match(/deleteObjectUnchecked[\s\S]*?getObjectVersionState/)) {
+  failures.push(`${storageRelative}: deleteObjectUnchecked must call getObjectVersionState.`);
+}
+
+if (!storageText.includes("!state.exists")) {
+  failures.push(
+    `${storageRelative}: deleteObjectUnchecked must return early if object does not exist.`,
+  );
+}
+
+if (!storageText.includes("state.versionId !== null")) {
+  failures.push(
+    `${storageRelative}: deleteObjectUnchecked must check state.versionId to conditionally add query param.`,
+  );
+}
+
+if (!storageText.includes('searchParams.set("versionId"')) {
+  failures.push(
+    `${storageRelative}: deleteObjectUnchecked must add versionId to query string when present.`,
+  );
+}
+
+// Verify signing happens after versionId is added to URL: searchParams must come before authHeaders
+if (!storageText.match(/searchParams\.set\("versionId"[\s\S]*?authHeaders\("DELETE"/)) {
+  failures.push(
+    `${storageRelative}: DELETE must be signed AFTER versionId is added to URL, not before.`,
+  );
+}
+
 /* ---- Access is signed, verified and short lived -------------------------- */
 
 const routeText = readFileSync(path.join(repoRoot, "apps/api/src/routes/pre-election.ts"), "utf8");
@@ -305,6 +364,77 @@ if (normalizer) {
         );
       }
     }
+  }
+}
+
+/* ---- Bucket policy grants version-aware deletion for pending -------------- */
+
+const policyPath = path.join(repoRoot, "deploy/storage/bucket-policy.json");
+let policyText = "";
+try {
+  policyText = readFileSync(policyPath, "utf8");
+} catch {
+  failures.push("deploy/storage/bucket-policy.json is missing.");
+}
+
+if (policyText) {
+  try {
+    const policy = JSON.parse(policyText);
+    let hasVersionDeleteGrant = false;
+
+    for (const statement of policy.Statement || []) {
+      if (
+        statement.Sid === "AllowApplicationToDeleteOnlyUncommittedRegistrationObjects" &&
+        statement.Resource?.includes("pending/*")
+      ) {
+        const actions = Array.isArray(statement.Action) ? statement.Action : [statement.Action];
+        if (actions.includes("s3:DeleteObjectVersion")) {
+          hasVersionDeleteGrant = true;
+        }
+      }
+    }
+
+    if (!hasVersionDeleteGrant) {
+      failures.push(
+        "deploy/storage/bucket-policy.json must grant s3:DeleteObjectVersion for the pending namespace to support versioned-bucket deletion.",
+      );
+    }
+  } catch {
+    failures.push("deploy/storage/bucket-policy.json is not valid JSON.");
+  }
+}
+
+/* ---- Storage README documents versioned lifecycle ------------------------- */
+
+const storageReadmePath = path.join(repoRoot, "deploy/storage/README.md");
+let storageReadme = "";
+try {
+  storageReadme = readFileSync(storageReadmePath, "utf8");
+} catch {
+  failures.push("deploy/storage/README.md is missing.");
+}
+
+if (storageReadme) {
+  if (!storageReadme.includes("NoncurrentVersionExpiration")) {
+    failures.push(
+      "deploy/storage/README.md must document NoncurrentVersionExpiration for versioned buckets. Expiration alone leaves object versions behind.",
+    );
+  }
+  if (!storageReadme.includes("ExpiredObjectDeleteMarker")) {
+    failures.push(
+      "deploy/storage/README.md must document ExpiredObjectDeleteMarker cleanup to remove delete markers after versions are gone.",
+    );
+  }
+  if (!storageReadme.includes("x-amz-version-id")) {
+    failures.push("deploy/storage/README.md must explain version-aware deletion via x-amz-version-id.");
+  }
+  if (!storageReadme.includes("HEAD request") && !storageReadme.includes("HEAD retrieves")) {
+    failures.push("deploy/storage/README.md must explain the HEAD request for version-aware deletion.");
+  }
+  if (!storageReadme.includes("Object Lock")) {
+    failures.push(
+      "deploy/storage/README.md must document the constraint that Object Lock cannot have a default retention policy on pending objects.",
+    );
   }
 }
 

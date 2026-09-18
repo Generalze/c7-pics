@@ -10,9 +10,11 @@ import { createApp } from "./app";
 import { env } from "./env";
 import { prisma } from "./prisma";
 import {
+  CommittedObjectDeletionRefused,
   EvidenceObjectAlreadyExistsError,
   InMemoryEvidenceObjectStorage,
   S3CompatibleEvidenceObjectStorage,
+  discardPendingObject,
   setEvidenceObjectStorageForTests,
 } from "@pics-nigeria/object-storage";
 
@@ -478,23 +480,27 @@ const cases: Array<{ name: string; run: () => Promise<void> }> = [
   {
     name: "S3CompatibleEvidenceObjectStorage version-aware deletion: versioned bucket with version ID",
     run: async () => {
-      // This test verifies S3CompatibleEvidenceObjectStorage.deleteObjectUnchecked:
-      // 1. Issues HEAD to retrieve x-amz-version-id
-      // 2. Includes versionId in DELETE request
-      // 3. Signs both requests with SigV4
+      // Verifies S3CompatibleEvidenceObjectStorage.deleteObjectUnchecked:
+      // 1. Issues HEAD to retrieve x-amz-version-id with SigV4 authorization
+      // 2. Includes versionId in DELETE request with SigV4 authorization
+      // 3. Both requests are signed
 
       const originalFetch = globalThis.fetch;
 
       let headWasCalled = false;
+      let headHadAuthHeader = false;
       let deleteWasCalled = false;
+      let deleteHadAuthHeader = false;
       let deleteUrl: URL | null = null;
 
       globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
         const urlObj = new URL(url);
         const method = init?.method || "GET";
+        const headers = init?.headers as Record<string, string> | undefined;
 
         if (method === "HEAD") {
           headWasCalled = true;
+          headHadAuthHeader = !!(headers && headers.Authorization);
           return new Response(null, {
             status: 200,
             headers: {
@@ -505,6 +511,7 @@ const cases: Array<{ name: string; run: () => Promise<void> }> = [
 
         if (method === "DELETE") {
           deleteWasCalled = true;
+          deleteHadAuthHeader = !!(headers && headers.Authorization);
           deleteUrl = urlObj;
           assert.ok(
             urlObj.searchParams.has("versionId"),
@@ -535,13 +542,70 @@ const cases: Array<{ name: string; run: () => Promise<void> }> = [
         await driver.deleteObjectUnchecked(testKey);
 
         assert.equal(headWasCalled, true, "HEAD must be called to retrieve version");
+        assert.equal(headHadAuthHeader, true, "HEAD must be SigV4-signed");
         assert.equal(deleteWasCalled, true, "DELETE must be called");
+        assert.equal(deleteHadAuthHeader, true, "DELETE must be SigV4-signed");
         assert.ok(deleteUrl, "DELETE URL must have been captured");
         const url = deleteUrl as URL;
         assert.equal(
           url.searchParams.get("versionId"),
           "test-version-abc123",
           "versionId must be in query string",
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  },
+  {
+    name: "S3CompatibleEvidenceObjectStorage deletion: URL-sensitive versionId encoding",
+    run: async () => {
+      // Version IDs from S3 can contain URL-sensitive characters.
+      // Verify versionId is properly encoded in the query string.
+
+      const originalFetch = globalThis.fetch;
+      let deleteUrl: URL | null = null;
+
+      globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+        const urlObj = new URL(url);
+        const method = init?.method || "GET";
+
+        if (method === "HEAD") {
+          return new Response(null, {
+            status: 200,
+            headers: {
+              "x-amz-version-id": "abc+def/ghi==",
+            },
+          });
+        }
+
+        if (method === "DELETE") {
+          deleteUrl = urlObj;
+          return new Response(null, { status: 204 });
+        }
+
+        return new Response(null, { status: 404 });
+      }) as typeof fetch;
+
+      try {
+        const driver = new S3CompatibleEvidenceObjectStorage({
+          endpoint: "https://s3-test.invalid",
+          region: "eu-central-1",
+          bucket: "test-bucket",
+          accessKey: "TESTACCESS",
+          secretKey: "TESTSECRET",
+          forcePathStyle: true,
+        });
+
+        await driver.deleteObjectUnchecked("voter-verification/pending/url-encoded-test.txt");
+
+        assert.ok(deleteUrl, "DELETE URL must have been captured");
+        const url = deleteUrl as URL;
+        const versionId = url.searchParams.get("versionId");
+        assert.equal(
+          versionId,
+          "abc+def/ghi==",
+          "URL-sensitive versionId must be preserved exactly",
         );
       } finally {
         globalThis.fetch = originalFetch;
@@ -651,14 +715,20 @@ const cases: Array<{ name: string; run: () => Promise<void> }> = [
     name: "S3CompatibleEvidenceObjectStorage deletion: HEAD authorization failure",
     run: async () => {
       // HEAD 403 indicates authorization failure. deleteObjectUnchecked should reject.
+      // DELETE must never be issued if HEAD fails.
 
       const originalFetch = globalThis.fetch;
+      let deleteWasCalled = false;
 
       globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
         const method = init?.method || "GET";
 
         if (method === "HEAD") {
           return new Response(null, { status: 403 });
+        }
+
+        if (method === "DELETE") {
+          deleteWasCalled = true;
         }
 
         return new Response(null, { status: 404 });
@@ -678,6 +748,101 @@ const cases: Array<{ name: string; run: () => Promise<void> }> = [
           () => driver.deleteObjectUnchecked("voter-verification/pending/forbidden.txt"),
           /version lookup failed with HTTP 403/,
         );
+
+        assert.equal(
+          deleteWasCalled,
+          false,
+          "DELETE must not be issued if HEAD returns 403",
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  },
+  {
+    name: "S3CompatibleEvidenceObjectStorage deletion: DELETE authorization failure",
+    run: async () => {
+      // HEAD succeeds but DELETE returns 403. deleteObjectUnchecked should reject.
+
+      const originalFetch = globalThis.fetch;
+
+      globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+        const method = init?.method || "GET";
+
+        if (method === "HEAD") {
+          return new Response(null, {
+            status: 200,
+            headers: {
+              "x-amz-version-id": "test-version-123",
+            },
+          });
+        }
+
+        if (method === "DELETE") {
+          return new Response(null, { status: 403 });
+        }
+
+        return new Response(null, { status: 404 });
+      }) as typeof fetch;
+
+      try {
+        const driver = new S3CompatibleEvidenceObjectStorage({
+          endpoint: "https://s3-test.invalid",
+          region: "eu-central-1",
+          bucket: "test-bucket",
+          accessKey: "TESTACCESS",
+          secretKey: "TESTSECRET",
+          forcePathStyle: true,
+        });
+
+        await assert.rejects(
+          () => driver.deleteObjectUnchecked("voter-verification/pending/delete-forbidden.txt"),
+          /object delete failed with HTTP 403/,
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  },
+  {
+    name: "S3CompatibleEvidenceObjectStorage deletion: DELETE 404 race condition",
+    run: async () => {
+      // HEAD succeeds and returns versionId, but DELETE returns 404 (deleted between HEAD and DELETE).
+      // This is idempotent success; the goal has been achieved.
+
+      const originalFetch = globalThis.fetch;
+
+      globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+        const method = init?.method || "GET";
+
+        if (method === "HEAD") {
+          return new Response(null, {
+            status: 200,
+            headers: {
+              "x-amz-version-id": "test-version-123",
+            },
+          });
+        }
+
+        if (method === "DELETE") {
+          return new Response(null, { status: 404 });
+        }
+
+        return new Response(null, { status: 404 });
+      }) as typeof fetch;
+
+      try {
+        const driver = new S3CompatibleEvidenceObjectStorage({
+          endpoint: "https://s3-test.invalid",
+          region: "eu-central-1",
+          bucket: "test-bucket",
+          accessKey: "TESTACCESS",
+          secretKey: "TESTSECRET",
+          forcePathStyle: true,
+        });
+
+        // Should not throw; 404 on DELETE is treated as success
+        await driver.deleteObjectUnchecked("voter-verification/pending/race-condition.txt");
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -687,9 +852,6 @@ const cases: Array<{ name: string; run: () => Promise<void> }> = [
     name: "pending namespace deletion guard enforces custody boundaries",
     run: async () => {
       // discardPendingObject must refuse keys outside the pending namespace.
-      const { discardPendingObject, CommittedObjectDeletionRefused } =
-        require("@pics-nigeria/object-storage");
-
       const committedKey = "voter-verification/2026/01/15/committed-doc-12345.jpg";
 
       await assert.rejects(

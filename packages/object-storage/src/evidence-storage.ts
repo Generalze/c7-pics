@@ -297,11 +297,45 @@ export class S3CompatibleEvidenceObjectStorage implements EvidenceObjectStorage 
     };
   }
 
-  async deleteObjectUnchecked(key: string): Promise<void> {
+  private async getObjectVersionId(key: string): Promise<string | null> {
+    // On a versioned bucket, HEAD returns the current version ID in x-amz-version-id.
+    // This allows us to delete the exact version rather than just creating a delete marker.
     const url = this.objectUrl(key);
+    const headers = this.authHeaders("HEAD", url, Buffer.alloc(0), {});
+    const result = await fetch(url, { method: "HEAD", headers });
+
+    if (result.status === 404) {
+      return null;
+    }
+    if (!result.ok) {
+      throw new Error(`S3-compatible object version lookup failed with HTTP ${result.status}.`);
+    }
+
+    const versionId = result.headers.get("x-amz-version-id");
+    return versionId || null;
+  }
+
+  async deleteObjectUnchecked(key: string): Promise<void> {
+    const versionId = await this.getObjectVersionId(key);
+
+    // 404 during HEAD means the object is already absent; that's success.
+    if (versionId === null) {
+      return;
+    }
+
+    const url = this.objectUrl(key);
+    // If the provider returned a version ID, include it in the DELETE request.
+    // This ensures the exact version is deleted on a versioned bucket,
+    // rather than just creating a delete marker.
+    if (versionId) {
+      url.searchParams.set("versionId", versionId);
+    }
+
     const headers = this.authHeaders("DELETE", url, Buffer.alloc(0), {});
     const result = await fetch(url, { method: "DELETE", headers });
-    // 404 is success for our purpose: the object is not there.
+
+    // 404 is success: in the unlikely event the object was deleted between HEAD and DELETE,
+    // we've still accomplished the goal.
     if (!result.ok && result.status !== 404) {
       throw new Error(`S3-compatible object delete failed with HTTP ${result.status}.`);
     }

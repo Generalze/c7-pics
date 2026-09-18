@@ -205,6 +205,22 @@ for (const file of files) {
   }
 }
 
+/* ---- S3 deletion is version-aware on versioned buckets -------------------- */
+
+if (!storageText.includes("getObjectVersionId")) {
+  failures.push(`${storageRelative}: S3 deletion must be version-aware via getObjectVersionId.`);
+}
+
+if (!storageText.includes("x-amz-version-id")) {
+  failures.push(`${storageRelative}: version-aware deletion must read x-amz-version-id from HEAD response.`);
+}
+
+if (!storageText.includes("versionId")) {
+  failures.push(
+    `${storageRelative}: version-aware deletion must include versionId in the DELETE request for versioned buckets.`,
+  );
+}
+
 /* ---- Access is signed, verified and short lived -------------------------- */
 
 const routeText = readFileSync(path.join(repoRoot, "apps/api/src/routes/pre-election.ts"), "utf8");
@@ -305,6 +321,69 @@ if (normalizer) {
         );
       }
     }
+  }
+}
+
+/* ---- Bucket policy grants version-aware deletion for pending -------------- */
+
+const policyPath = path.join(repoRoot, "deploy/storage/bucket-policy.json");
+let policyText = "";
+try {
+  policyText = readFileSync(policyPath, "utf8");
+} catch {
+  failures.push("deploy/storage/bucket-policy.json is missing.");
+}
+
+if (policyText) {
+  try {
+    const policy = JSON.parse(policyText);
+    let hasVersionDeleteGrant = false;
+
+    for (const statement of policy.Statement || []) {
+      if (
+        statement.Sid === "AllowApplicationToDeleteOnlyUncommittedRegistrationObjects" &&
+        statement.Resource?.includes("pending/*")
+      ) {
+        const actions = Array.isArray(statement.Action) ? statement.Action : [statement.Action];
+        if (actions.includes("s3:DeleteObjectVersion")) {
+          hasVersionDeleteGrant = true;
+        }
+      }
+    }
+
+    if (!hasVersionDeleteGrant) {
+      failures.push(
+        "deploy/storage/bucket-policy.json must grant s3:DeleteObjectVersion for the pending namespace to support versioned-bucket deletion.",
+      );
+    }
+  } catch {
+    failures.push("deploy/storage/bucket-policy.json is not valid JSON.");
+  }
+}
+
+/* ---- Storage README documents versioned lifecycle ------------------------- */
+
+const storageReadmePath = path.join(repoRoot, "deploy/storage/README.md");
+let storageReadme = "";
+try {
+  storageReadme = readFileSync(storageReadmePath, "utf8");
+} catch {
+  failures.push("deploy/storage/README.md is missing.");
+}
+
+if (storageReadme) {
+  if (!storageReadme.includes("NoncurrentVersionExpiration")) {
+    failures.push(
+      "deploy/storage/README.md must document NoncurrentVersionExpiration for versioned buckets. Expiration alone leaves object versions behind.",
+    );
+  }
+  if (!storageReadme.includes("x-amz-version-id")) {
+    failures.push("deploy/storage/README.md must explain version-aware deletion via x-amz-version-id.");
+  }
+  if (!storageReadme.includes("Object Lock")) {
+    failures.push(
+      "deploy/storage/README.md must document the constraint that Object Lock cannot have a default retention policy on pending objects.",
+    );
   }
 }
 

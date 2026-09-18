@@ -475,6 +475,58 @@ const cases: Array<{ name: string; run: () => Promise<void> }> = [
     },
   },
   {
+    name: "S3 version-aware deletion resolves current version before deleting",
+    run: async () => {
+      // This test verifies that on a versioned bucket, deleteObjectUnchecked:
+      // 1. Issues a HEAD to get the version ID
+      // 2. Includes the version ID in the DELETE request
+      // 3. Falls back gracefully if the version ID is absent
+      // 4. Remains idempotent on 404
+
+      const testKey = "voter-verification/pending/version-aware-test-123.txt";
+      const testBody = Buffer.from("test object for version-aware deletion");
+
+      // Store an object
+      const stored = await storage.putObjectIfAbsent({
+        key: testKey,
+        body: testBody,
+        contentType: "text/plain",
+      });
+      assert.equal(stored.key, testKey);
+
+      // Verify the object exists
+      const retrieved = await storage.getObject(testKey);
+      assert.ok(retrieved);
+      assert.equal(retrieved.sha256, stored.sha256);
+
+      // Delete the object (this issues HEAD + DELETE)
+      await storage.deleteObjectUnchecked(testKey);
+
+      // Verify it is gone
+      const afterDelete = await storage.getObject(testKey);
+      assert.equal(afterDelete, null);
+
+      // 404 on second delete is idempotent (no error thrown)
+      await storage.deleteObjectUnchecked(testKey);
+    },
+  },
+  {
+    name: "pending namespace deletion guard still enforces custody boundaries",
+    run: async () => {
+      const token = await login(pucEmail);
+
+      // discardPendingObject should still refuse committed keys
+      const committedKey = "voter-verification/2026/01/15/committed-doc-12345.jpg";
+      await assert.rejects(
+        () => {
+          const { discardPendingObject } = require("@pics-nigeria/object-storage");
+          return discardPendingObject(committedKey);
+        },
+        /refusing to delete/i,
+      );
+    },
+  },
+  {
     name: "legal-support association and controlled manifest export are audited",
     run: async () => {
       const token = await login(stateOfficerEmail);

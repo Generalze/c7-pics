@@ -433,7 +433,28 @@ if (storageReadme) {
   }
   if (!storageReadme.includes("Object Lock")) {
     failures.push(
-      "deploy/storage/README.md must document the constraint that Object Lock cannot have a default retention policy on pending objects.",
+      "deploy/storage/README.md must document Object Lock configuration and first-release deferral.",
+    );
+  }
+
+  if (!storageReadme.includes("FIRST RELEASE: Do not enable Object Lock")) {
+    failures.push(
+      "deploy/storage/README.md must explicitly state that Object Lock is disabled for first release.",
+    );
+  }
+
+  if (!storageReadme.includes("Deferred / Disabled for first release")) {
+    failures.push(
+      "deploy/storage/README.md bucket configuration table must show Object Lock as deferred for first release.",
+    );
+  }
+
+  if (
+    storageReadme.includes("Object Lock") &&
+    storageReadme.match(/\|\s*Object Lock\s*\|\s*Enabled\s*in\s*governance/i)
+  ) {
+    failures.push(
+      "deploy/storage/README.md must not claim Object Lock is enabled for first release.",
     );
   }
 }

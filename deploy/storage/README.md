@@ -20,7 +20,7 @@ other than `s3`.
 |---|---|---|
 | Public access | Blocked, all four settings | A public object here is a member's identity document on the open internet. |
 | Versioning | Enabled | An overwritten original is otherwise unrecoverable, and the hash recorded at upload would no longer match anything. |
-| Object Lock | Enabled in governance mode, where the provider supports it | Evidence that can be silently replaced is evidence that cannot be relied on. |
+| Object Lock | **Deferred / Disabled for first release** | Immutability will be enforced by application boundaries, versioning, and custodian authority. Object Lock enablement deferred pending commitment of a versioned-object retention and legal-hold design. |
 | Encryption at rest | Enabled (SSE-S3 or SSE-KMS) | |
 | TLS | Required | `DenyUnencryptedTransport` in the policy enforces it; the endpoint must also be `https://`. |
 | Lifecycle expiry | **None on committed objects.** One rule, on `voter-verification/pending/` only | Evidence has no expiry date, and a lifecycle rule that quietly deletes it destroys the record without an audit trail. The pending namespace is the sole exception, and it holds only bytes no database row owns yet. |
@@ -129,24 +129,25 @@ required, and delete separated from the application identity.
 
 ## Object Lock Configuration
 
-**Important:** Do NOT enable a default bucket-wide retention policy.
+**FIRST RELEASE: Do not enable Object Lock on the production bucket.**
 
-Object Lock in governance mode provides evidence immutability for committed
-objects, but a global retention policy would make pending objects undeletable.
-Pending objects must remain deletable to support transaction rollback.
-
-If Object Lock is enabled:
-1. Enable governance mode (not compliance mode)
-2. Do NOT set a default retention policy on all objects
-3. Do NOT enable automatic retention on object uploads
-4. Committed-object retention may be configured later with an explicit design
-   that does not affect the pending namespace
-
-Currently, immutability is enforced by:
+Immutability for first release is enforced by:
 - Application code boundary (only `discardPendingObject` can delete)
 - IAM/bucket policy boundary (DELETE operations scoped to pending namespace)
 - Versioning (allowing historical recovery if an object is overwritten)
 - Separate custodian authority (delete operations outside pending namespace)
+
+Object Lock is an irreversible bucket capability. Enabling it requires an
+approved design for committed-object retention and legal holds, which is
+deferred beyond first release. Once retention requirements are formalized,
+Object Lock may be enabled on an existing bucket.
+
+**FUTURE: If Object Lock is enabled later:**
+1. Enable governance mode only (not compliance mode)
+2. Do NOT enable bucket-wide default retention
+3. Do NOT enable automatic retention on all uploads
+4. Apply retention only to committed objects via explicit design
+5. Ensure pending namespace remains outside any retention scope
 
 ## Verifying it
 

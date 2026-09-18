@@ -12,7 +12,7 @@ const useExistingDatabase = process.argv.includes("--existing-database");
 const dockerCommand = process.platform === "win32" ? "docker.exe" : "docker";
 const npmCli = process.env.npm_execpath;
 const composeFile = path.join(repoRoot, "docker-compose.dev.yml");
-const composeProject = `bmo-deedoc-integration-${process.pid}`;
+const composeProject = `c7-pics-integration-${process.pid}`;
 const postgresPort = process.env.OGUN_TEST_POSTGRES_PORT || "55433";
 const dockerDatabaseUrl = `postgresql://ogun_test:ogun_test_local_only@127.0.0.1:${postgresPort}/ogun_phase0_test?schema=public`;
 const databaseUrl = useExistingDatabase ? process.env.DATABASE_URL : dockerDatabaseUrl;

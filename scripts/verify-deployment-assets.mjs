@@ -30,6 +30,8 @@ const requiredAssets = [
   "deploy/docker/web.Dockerfile",
   "deploy/docker/worker.Dockerfile",
   "deploy/caddy/Caddyfile",
+  "deploy/caddy/Caddyfile.shared-host",
+  "deploy/docker-compose.shared-host.yml",
   "deploy/coturn/turnserver.conf.template",
   "deploy/coturn/entrypoint.sh",
   ".env.production.example",
@@ -37,6 +39,7 @@ const requiredAssets = [
   "deploy/storage/bucket-policy.json",
   "deploy/storage/README.md",
   "docs/DEPLOYMENT_VPS.md",
+  "docs/DEPLOYMENT_SHARED_HOST.md",
   ".dockerignore",
 ];
 
@@ -113,6 +116,27 @@ if (!caddyfile.includes("/socket.io/")) {
 }
 if (!caddyfile.includes("handle_path /api/*")) {
   failures.push("Caddy must expose the API under /api for the current frontend contract.");
+}
+
+// Shared-host Caddyfile validations
+const caddyfileSharedHost = contents.get("deploy/caddy/Caddyfile.shared-host") || "";
+if (!caddyfileSharedHost.includes("@socketio path /socket.io/*")) {
+  failures.push("Shared-host Caddyfile must match Socket.IO routes (@socketio path /socket.io/*).");
+}
+if (!caddyfileSharedHost.includes("handle_path /api/*")) {
+  failures.push("Shared-host Caddyfile must expose API under /api with handle_path.");
+}
+if (!caddyfileSharedHost.includes("127.0.0.1:4000")) {
+  failures.push("Shared-host Caddyfile must proxy API to loopback-only 127.0.0.1:4000.");
+}
+if (!caddyfileSharedHost.includes("127.0.0.1:3000")) {
+  failures.push("Shared-host Caddyfile must proxy web to loopback-only 127.0.0.1:3000.");
+}
+if (!caddyfileSharedHost.includes("rewrite /health")) {
+  failures.push("Shared-host Caddyfile must rewrite /healthz to /health for the health probe.");
+}
+if (!caddyfileSharedHost.includes("request_body")) {
+  failures.push("Shared-host Caddyfile must declare request_body ceiling (match API_JSON_BODY_LIMIT).");
 }
 
 const turnTemplate = contents.get("deploy/coturn/turnserver.conf.template") || "";
@@ -343,6 +367,144 @@ if (storageReadme) {
       "deploy/storage/README.md still claims the application never deletes. It deletes exactly one thing: an uncommitted registration object.",
     );
   }
+}
+
+// Shared-host Docker Compose override validations
+const sharedHostCompose = contents.get("deploy/docker-compose.shared-host.yml") || "";
+if (!sharedHostCompose.includes("--env-file /etc/pics/production.env")) {
+  failures.push("Shared-host compose usage comment must document --env-file /etc/pics/production.env (not .env.production).");
+}
+if (!sharedHostCompose.includes("127.0.0.1:${C7_PICS_API_HOST_PORT:-4000}:4000")) {
+  failures.push("Shared-host override must bind API to immutable loopback 127.0.0.1 (not just port override).");
+}
+if (!sharedHostCompose.includes("127.0.0.1:${C7_PICS_WEB_HOST_PORT:-3000}:3000")) {
+  failures.push("Shared-host override must bind web to immutable loopback 127.0.0.1 (not just port override).");
+}
+if (sharedHostCompose.includes('"5432:5432"') || sharedHostCompose.includes('"6379:6379"') ||
+    sharedHostCompose.includes("5432:5432") || sharedHostCompose.includes("6379:6379")) {
+  failures.push("Shared-host override must not publish postgres or redis to the host.");
+}
+if (!sharedHostCompose.includes("profiles:") || !sharedHostCompose.includes("dedicated-edge")) {
+  failures.push("Shared-host override must disable Caddy via profiles: [dedicated-edge].");
+}
+if (!sharedHostCompose.includes("deploy:") || !sharedHostCompose.includes("replicas: 0")) {
+  failures.push("Shared-host override must disable Caddy container (replicas: 0).");
+}
+if (!sharedHostCompose.includes("TURN_PORT") || !sharedHostCompose.includes("3479")) {
+  failures.push("Shared-host override must configure separate TURN port (3479, not videofy's 3478).");
+}
+if (!sharedHostCompose.includes("TURN_MIN_PORT") || !sharedHostCompose.includes("49301")) {
+  failures.push("Shared-host override must configure separate TURN relay range (49301-49400).");
+}
+
+// Shared-host deployment runbook validations
+const deploymentRunbook = contents.get("docs/DEPLOYMENT_SHARED_HOST.md") || "";
+if (!deploymentRunbook.includes("/srv/pics/releases/")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document immutable release paths (/srv/pics/releases/<sha>).");
+}
+if (!deploymentRunbook.includes("/srv/pics/current")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document atomic symlink switch (/srv/pics/current).");
+}
+if (deploymentRunbook.includes("/srv/pics/app")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md contains stale mutable /srv/pics/app paths; replace with /srv/pics/current or /srv/pics/releases/<sha>.");
+}
+if (!deploymentRunbook.includes("IMAGE_TAG")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document SHA-based IMAGE_TAG activation for Docker image reproducibility.");
+}
+if (!deploymentRunbook.includes("ln -s /etc/pics/production.env") || !deploymentRunbook.includes(".env.production")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document .env.production symlink linking to /etc/pics/production.env.");
+}
+if (!deploymentRunbook.includes("IMAGE_TAG=") || !deploymentRunbook.slice(deploymentRunbook.indexOf("Rollback") || 0).includes("IMAGE_TAG")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md rollback procedure must re-activate with IMAGE_TAG=$PREVIOUS_SHA.");
+}
+if (!deploymentRunbook.includes("Verify LOCAL health") && !deploymentRunbook.includes("127.0.0.1:4000/health")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must verify LOCAL loopback health before switching /srv/pics/current.");
+}
+if (!deploymentRunbook.includes("caddy validate") || !deploymentRunbook.includes("caddy reload")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document actual Caddy parser validation (caddy validate) before reload.");
+}
+
+if (!deploymentRunbook.includes("profiles:") || !deploymentRunbook.includes("dedicated-edge")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document Caddy profile (profiles: [dedicated-edge]) as primary exclusion mechanism.");
+}
+
+// Verify build command includes env-file
+if (!deploymentRunbook.slice(deploymentRunbook.indexOf("# 5. Build") || 0, deploymentRunbook.indexOf("# 6.") || Infinity).includes("--env-file /etc/pics/production.env")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md build command (step 5) must include --env-file /etc/pics/production.env for Compose interpolation.");
+}
+
+// Verify activation/up command includes env-file
+if (!deploymentRunbook.slice(deploymentRunbook.indexOf("# 6. Start") || 0, deploymentRunbook.indexOf("# 7.") || Infinity).includes("--env-file /etc/pics/production.env")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md activation command (step 6) must include --env-file /etc/pics/production.env.");
+}
+
+// Verify rollback command includes env-file
+if (!deploymentRunbook.slice(deploymentRunbook.indexOf("### Rollback") || 0, deploymentRunbook.indexOf("### Post-Deployment") || Infinity).includes("--env-file /etc/pics/production.env")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md rollback command must include --env-file /etc/pics/production.env for re-activation.");
+}
+
+// Verify operational logs and database commands use shared-host override and env
+const operationalSection = deploymentRunbook.slice(deploymentRunbook.indexOf("### Post-Deployment") || 0);
+const logsMatch = operationalSection.match(/docker compose.*-f docker-compose.prod.yml.*-f deploy\/docker-compose.shared-host.yml.*--env-file \/etc\/pics\/production.env.*logs/s);
+if (!logsMatch) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md post-deployment logs command must use shared-host override and env-file.");
+}
+const execMatch = operationalSection.match(/docker compose.*-f docker-compose.prod.yml.*-f deploy\/docker-compose.shared-host.yml.*--env-file \/etc\/pics\/production.env.*exec/s);
+if (!execMatch) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md post-deployment exec/database command must use shared-host override and env-file.");
+}
+
+// Verify env file ownership procedure is non-destructive
+const preDeploySection = deploymentRunbook.slice(deploymentRunbook.indexOf("### Pre-Deployment") || 0, deploymentRunbook.indexOf("### Deployment Command") || Infinity);
+if (!preDeploySection.includes("[ ! -e /etc/pics/production.env ]")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must guard env file creation with [ ! -e ] check to prevent overwriting existing secrets.");
+}
+if (!preDeploySection.includes("install") || !preDeploySection.includes("-o claude")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must create production.env with 'install' and owner 'claude' for deployment account access.");
+}
+if (!preDeploySection.includes("-g videofy") || !preDeploySection.includes("-m 600")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must create production.env with group 'videofy' and permissions '600'.");
+}
+if (!preDeploySection.includes("sudo chown claude:videofy /etc/pics/production.env")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must have else branch to preserve existing production.env while correcting ownership.");
+}
+if (!preDeploySection.includes("sudo chmod 600 /etc/pics/production.env")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must ensure existing production.env has correct permissions in else branch.");
+}
+if (!preDeploySection.includes("stat -c '%U %G %a %s %n'")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must verify env file with stat command including size (%s) to detect empty files.");
+}
+if (!preDeploySection.includes("claude videofy 600")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document expected stat output showing correct ownership and permissions.");
+}
+if (!preDeploySection.includes("test -s /etc/pics/production.env")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must enforce non-empty production.env with 'test -s' check.");
+}
+if (!preDeploySection.includes("ERROR: /etc/pics/production.env is empty")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md must document error message when production.env is empty.");
+}
+
+// Verify database health command uses correct shell variable expansion
+if (!operationalSection.includes("sh -lc")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md database health command must use 'sh -lc' for container-side variable expansion.");
+}
+if (!operationalSection.includes("POSTGRES_USER")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md database health command must reference $POSTGRES_USER.");
+}
+// In double-quoted SSH context, use \$ (one backslash) to escape, not \\$ or \\\$
+if (operationalSection.includes('sh -lc') && operationalSection.includes('POSTGRES_USER')) {
+  const dbSection = operationalSection.slice(operationalSection.indexOf("sh -lc"));
+  // Should have \$ (escaped for local shell, becomes $ for remote)
+  // Should NOT have \\\\$ or \\\\\\$ (over-escaped)
+  if (dbSection.includes('\\\\\\\\$')) {
+    failures.push("DEPLOYMENT_SHARED_HOST.md database health: $POSTGRES_USER is over-escaped; use \\$ not \\\\\\$ in double-quoted SSH command.");
+  }
+  if (!dbSection.includes('\\$POSTGRES_USER')) {
+    failures.push("DEPLOYMENT_SHARED_HOST.md database health: $POSTGRES_USER must be escaped as \\$ to survive local shell in double-quoted SSH command.");
+  }
+}
+if (!operationalSection.includes("POSTGRES_DB")) {
+  failures.push("DEPLOYMENT_SHARED_HOST.md database health command must reference ${POSTGRES_DB:-ogun_production}.");
 }
 
 if (failures.length > 0) {

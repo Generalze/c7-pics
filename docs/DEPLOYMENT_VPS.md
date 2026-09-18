@@ -87,8 +87,8 @@ Do **not** open 5432 or 6379. They are internal to the compose network.
 ## 4. Environment and secrets
 
 ```bash
-git clone https://github.com/masterzee001/bmo-deedoc.git
-cd bmo-deedoc
+git clone https://github.com/Generalze/c7-pics.git
+cd c7-pics
 cp .env.production.example .env.production
 chmod 600 .env.production
 $EDITOR .env.production

@@ -1,0 +1,77 @@
+# Shared-host production override for c7-eu-01
+#
+# USAGE:
+#   docker compose \
+#     -f docker-compose.prod.yml \
+#     -f deploy/docker-compose.shared-host.yml \
+#     --env-file /etc/pics/production.env \
+#     up -d
+#
+# DIFFERENCES FROM DEDICATED VPS:
+#
+# 1. No Caddy service
+#    The existing host Caddy (c7-eu-01:80/443) is authoritative.
+#    C7-PICS containers do NOT publish HTTP/HTTPS.
+#
+# 2. API: loopback-only host binding
+#    Web and API are exposed ONLY to 127.0.0.1 on the host.
+#    The host Caddy reverse-proxies from https://pics.consummate7.com.
+#
+# 3. PostgreSQL/Redis: no host bindings
+#    Both remain Docker-internal, reachable only on the backplane network.
+#
+# 4. Coturn: host-networked but separate ports
+#    Uses non-conflicting ports (3479, 49301-49400) vs. videofy's (3478, 49160-49300).
+#    Still requires authorization to run on the host.
+
+services:
+  api:
+    ports:
+      - "127.0.0.1:${C7_PICS_API_HOST_PORT:-4000}:4000"
+
+  web:
+    ports:
+      - "127.0.0.1:${C7_PICS_WEB_HOST_PORT:-3000}:3000"
+
+  # Caddy is excluded from shared-host via profiles.
+  # The host's /etc/caddy/Caddyfile is authoritative.
+  caddy:
+    profiles:
+      - dedicated-edge
+    deploy:
+      replicas: 0
+
+  # Coturn listens on the host network (required for TURN relay allocation).
+  # Configured to use separate ports and relay range to avoid collision
+  # with videofy's TURN service.
+  coturn:
+    restart: unless-stopped
+    # Separate realm, ports, and credentials from videofy.
+    environment:
+      TURN_REALM: ${TURN_REALM:-turn.pics.consummate7.com}
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:?TURN_EXTERNAL_IP is required}
+      TURN_USERNAME: ${TURN_USERNAME:?TURN_USERNAME is required}
+      TURN_CREDENTIAL: ${TURN_CREDENTIAL:?TURN_CREDENTIAL is required}
+      TURN_PORT: ${TURN_PORT:-3479}
+      TURN_MIN_PORT: ${TURN_MIN_PORT:-49301}
+      TURN_MAX_PORT: ${TURN_MAX_PORT:-49400}
+      TURN_TLS_CERT: ${TURN_TLS_CERT:-}
+      TURN_TLS_KEY: ${TURN_TLS_KEY:-}
+      TURN_TLS_PORT: ${TURN_TLS_PORT:-5350}
+
+networks:
+  backplane:
+    # Shared host: ensure C7-PICS and videofy don't accidentally share a network.
+    # If Docker bridge conflicts occur, consider renaming to c7-pics-backplane.
+    name: c7-pics-backplane
+    driver: bridge
+
+volumes:
+  postgres-data:
+    name: c7-pics-postgres-data
+  redis-data:
+    name: c7-pics-redis-data
+  caddy-data:
+    name: c7-pics-caddy-data
+  caddy-config:
+    name: c7-pics-caddy-config

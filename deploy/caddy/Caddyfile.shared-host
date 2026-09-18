@@ -1,0 +1,70 @@
+# C7-PICS Caddy configuration for shared c7-eu-01 host
+#
+# This block is added to /etc/caddy/Caddyfile on the host.
+# It proxies https://pics.consummate7.com to C7-PICS services running in Docker
+# on loopback (127.0.0.1:4000 for API, 127.0.0.1:3000 for web).
+#
+# The host's system Caddy is authoritative for ports 80/443.
+# C7-PICS containers do NOT run Caddy; the container Caddy is disabled
+# via docker-compose.shared-host.yml.
+
+pics.consummate7.com {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Socket.IO must be matched before /api/* to preserve WebSocket upgrade.
+	# Long transport timeout keeps idle field connections alive during the
+	# realtime connection state recovery window (120s).
+	@socketio path /socket.io/*
+	handle @socketio {
+		reverse_proxy 127.0.0.1:4000 {
+			transport http {
+				read_timeout 24h
+				write_timeout 24h
+			}
+		}
+	}
+
+	# API prefix is stripped before forwarding to the backend, which mounts
+	# its routes at the root. Evidence uploads can be large and slow, so
+	# the read timeout accommodates field uploads.
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:4000 {
+			transport http {
+				read_timeout 300s
+				write_timeout 300s
+			}
+		}
+	}
+
+	# Health check: orchestration probe that does not depend on the web container.
+	handle /healthz {
+		reverse_proxy 127.0.0.1:4000 {
+			rewrite /health
+		}
+	}
+
+	# Everything else -> web SPA (Next.js).
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	# Request body ceiling sits above the API's own API_JSON_BODY_LIMIT so the
+	# application returns its structured 413 rather than the proxy cutting off
+	# the connection mid-upload.
+	request_body {
+		max_size {$MAX_REQUEST_BODY:12MB}
+	}
+
+	log {
+		output file /var/log/caddy/c7-pics.log
+		format json
+	}
+}

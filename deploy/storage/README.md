@@ -35,6 +35,16 @@ other than `s3`.
   delete a committed object. It must not be the application principal, so an
   application credential leak cannot destroy evidence.
 
+The policy enforces **conditional writes**: the application's `PutObject` requests
+must include the `If-None-Match: "*"` header. This prevents leaked credentials from
+bypassing the application code and overwriting committed objects directly. The
+application already sends this header; the policy enforces it at the bucket layer.
+
+The policy also prevents the application from mutating bucket lifecycle
+configuration. S3 lifecycle rules can delete objects independently of `DeleteObject`
+permissions. Only infrastructure administration may configure the pending-namespace
+lifecycle rule.
+
 ## Two custody states
 
 A document has to be written to storage before the database row that owns it

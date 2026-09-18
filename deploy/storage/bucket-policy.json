@@ -55,6 +55,29 @@
           "aws:PrincipalArn": ["EVIDENCE_CUSTODIAN_PRINCIPAL_ARN", "APPLICATION_PRINCIPAL_ARN"]
         }
       }
+    },
+    {
+      "Sid": "DenyApplicationUnconditionalObjectWrites",
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "APPLICATION_PRINCIPAL_ARN"
+      },
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::BUCKET_NAME/*",
+      "Condition": {
+        "Null": {
+          "s3:if-none-match": "true"
+        }
+      }
+    },
+    {
+      "Sid": "DenyApplicationLifecycleMutation",
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "APPLICATION_PRINCIPAL_ARN"
+      },
+      "Action": "s3:PutLifecycleConfiguration",
+      "Resource": "arn:aws:s3:::BUCKET_NAME"
     }
   ]
 }

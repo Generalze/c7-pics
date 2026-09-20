@@ -834,6 +834,74 @@ export async function fetchAdminSummary(token: string): Promise<AdminDashboardSu
   return payload.summary;
 }
 
+export type CommandCentreAgentState =
+  | "pending"
+  | "arrived"
+  | "voting_underway"
+  | "counting"
+  | "result_submitted"
+  | "verified"
+  | "absent"
+  | "incident"
+  | "technical";
+
+export type CommandCentreMetrics = {
+  operationalMetrics: {
+    pusReporting: { total: number; reporting: number; percentageCompleted: number };
+    resultsVerification: {
+      total: number;
+      verified: number;
+      pending: number;
+      flagged: number;
+      percentageVerified: number;
+    };
+    incidentTracking: { total: number; openHigh: number; escalated: number; resolved: number };
+    agentStatus: {
+      total: number;
+      byState: Record<CommandCentreAgentState, number>;
+      agents: Array<{ id: string; name: string; state: CommandCentreAgentState }>;
+    };
+    evidence: {
+      total: number;
+      resultSheets: number;
+      incidentImages: number;
+      verified: number;
+      pending: number;
+      flagged: number;
+      filed: number;
+    };
+  };
+  partyTally: Record<string, { votes: number; percent: number }>;
+  lastUpdated: string;
+};
+
+export type CommandCentreSystemStatus = {
+  activeAgentConnections: number;
+  submissionsPerMinute: number;
+  /** Not measured yet; the API sends null rather than a made-up figure. */
+  serverLoadPercent: number | null;
+  evidenceUploads: number;
+  timestamp: string;
+};
+
+export async function fetchCommandCentreMetrics(token: string): Promise<CommandCentreMetrics> {
+  const response = await fetch(`${API_BASE_URL}/dashboard/metrics`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+
+  return readJson<CommandCentreMetrics>(response);
+}
+
+export async function fetchCommandCentreSystemStatus(token: string): Promise<CommandCentreSystemStatus> {
+  const response = await fetch(`${API_BASE_URL}/dashboard/system-status`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+
+  return readJson<CommandCentreSystemStatus>(response);
+}
+
 export async function fetchAdminCandidates(token: string): Promise<CandidateListItem[]> {
   const response = await fetch(`${API_BASE_URL}/admin/candidates`, {
     headers: { Authorization: `Bearer ${token}` },

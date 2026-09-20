@@ -1,0 +1,19 @@
+{
+  "cli": { "version": ">= 24.0.0", "appVersionSource": "remote" },
+  "build": {
+    "production-apk": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://pics.consummate7.com/api"
+      }
+    },
+    "production": {
+      "android": { "buildType": "app-bundle" },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://pics.consummate7.com/api"
+      }
+    }
+  },
+  "submit": { "production": {} }
+}

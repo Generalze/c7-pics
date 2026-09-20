@@ -1,0 +1,63 @@
+{
+  "expo": {
+    "name": "PICS Agent",
+    "slug": "pics-agent",
+    "owner": "consummate7",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "picsagent",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "ng.pics.agent",
+      "adaptiveIcon": {
+        "backgroundColor": "#0b1a2b",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.INTERNET"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#0b1a2b"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "PICS Agent records your polling unit position when you check in and while you are on duty.",
+          "locationWhenInUsePermission": "PICS Agent records your polling unit position when you check in and while you are on duty.",
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "PICS Agent uses the camera for arrival and post-counting photos.",
+          "photosPermission": "PICS Agent attaches photos you choose to election-day reports.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7e996ff4-c811-4546-8f3f-865ac0ee29eb"
+      }
+    }
+  }
+}

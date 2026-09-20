@@ -1,0 +1,37 @@
+{
+  "name": "@pics-nigeria/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "doctor": "npx expo-doctor"
+  },
+  "dependencies": {
+    "expo": "~57.0.24",
+    "expo-constants": "~57.0.19",
+    "expo-image-picker": "~57.0.19",
+    "expo-linking": "~57.0.10",
+    "expo-location": "~57.0.19",
+    "expo-router": "~57.0.22",
+    "expo-secure-store": "~57.0.4",
+    "expo-splash-screen": "~57.0.9",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.4",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "expo": {
+    "install": {
+      "//": "Expo SDK 57 pins react 19.2.3, but Next.js 15 in apps/web depends on 19.2.4 and breaks if forced lower. A native build may contain only one React, so the workspace hoists 19.2.4 and this app uses it: one copy, one patch ahead of the SDK's tested version.",
+      "exclude": ["react"]
+    }
+  }
+}

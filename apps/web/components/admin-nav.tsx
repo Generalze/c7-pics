@@ -55,7 +55,7 @@ const groups: AdminNavGroup[] = [
   {
     title: "Monitoring",
     items: [
-      { href: "/admin/election-day/command-centre", label: "Command Centre", roles: ["SUPER_ADMIN", "STATE_OFFICER", "ADMIN"] },
+      { href: "/command", label: "Election Command", roles: ["SUPER_ADMIN", "STATE_OFFICER", "ADMIN"] },
       { href: "/admin/operations/live", label: "Live Ops", roles: ["ADMIN", "SUPER_ADMIN"] },
       { href: "/admin/operations/coverage", label: "Coverage", roles: ["ADMIN", "SUPER_ADMIN"] },
       { href: "/admin/incidents", label: "Incidents", roles: ["ADMIN", "SUPER_ADMIN"] },

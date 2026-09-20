@@ -959,6 +959,36 @@ export async function fetchAdminIncidentReview(
   return readJson<{ incidents: IncidentListItem[]; governance: IncidentGovernanceSummary }>(response);
 }
 
+export async function updateAdminIncidentStatus(
+  token: string,
+  incidentId: string,
+  status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED",
+): Promise<IncidentListItem> {
+  const response = await fetch(`${API_BASE_URL}/admin/incidents/${encodeURIComponent(incidentId)}/status`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+
+  const payload = await readJson<{ incident: IncidentListItem }>(response);
+  return payload.incident;
+}
+
+export async function escalateAdminIncident(
+  token: string,
+  incidentId: string,
+  escalationNote: string,
+): Promise<IncidentListItem> {
+  const response = await fetch(`${API_BASE_URL}/admin/incidents/${encodeURIComponent(incidentId)}/escalate`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ escalationNote }),
+  });
+
+  const payload = await readJson<{ incident: IncidentListItem }>(response);
+  return payload.incident;
+}
+
 export async function fetchAdminAgentActivitySummaries(token: string): Promise<AgentActivitySummary[]> {
   const response = await fetch(`${API_BASE_URL}/admin/agent-activity-summaries`, {
     headers: { Authorization: `Bearer ${token}` },

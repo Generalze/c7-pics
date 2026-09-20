@@ -1,5 +1,6 @@
 import { runAdminGlobalStructureTests } from "./admin-global-structures.test";
 import { runCandidatePublicTests } from "./candidate-public.test";
+import { runDashboardMetricsTests } from "./dashboard-metrics.test";
 import { runElectionDayTests } from "./election-day.test";
 import { runEdgeGovernanceTests } from "./edge-governance.test";
 import { runEvidenceTests } from "./evidence.test";
@@ -11,6 +12,7 @@ import { runRealtimeTests } from "./realtime.test";
 void (async () => {
   await runAdminGlobalStructureTests();
   await runCandidatePublicTests();
+  await runDashboardMetricsTests();
   await runElectionDayTests();
   await runEvidenceTests();
   await runEdgeGovernanceTests();

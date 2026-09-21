@@ -13,51 +13,59 @@
 
 :root {
   /* ---- Colour ---------------------------------------------------------
-   * The existing palette measured well and is kept: --text on --bg is 14.09:1,
-   * --navy 13.4, --danger 7.37, --accent 6.5, --muted 5.22. What was missing is
-   * semantic state.
+   * The operations palette, matching the Election Command console at /command.
+   * A dark ground is what the reference design specifies and what a situation
+   * room actually wants: the screen is on all day, often on a projector, and
+   * the data should be the only bright thing on it.
+   *
+   * The token NAMES are unchanged, so every screen that already paints with
+   * them moves with the palette instead of being rewritten. Contrast on the
+   * new ground: --text 13.6:1, --text-secondary 9.1, --muted 6.2, --accent
+   * 8.4, --danger 5.6 — all above AA for body text.
+   *
+   * The sign-in door keeps the old light palette; see .theme-light below.
    */
-  --flag-green: #0a8f4d;
-  --navy: #12314b;
-  --navy-soft: #1d4464;
+  --flag-green: #00d084;
+  --navy: #0b1218;
+  --navy-soft: #14212a;
 
-  --bg: #eef2f4;
-  --bg-deep: #e4eaee;
-  --surface: #ffffff;
-  --surface-sunken: #f4f7f9;
-  --surface-raised: #ffffff;
+  --bg: #090f14;
+  --bg-deep: #060b0f;
+  --surface: #0f1920;
+  --surface-sunken: #0b141a;
+  --surface-raised: #14212a;
 
-  --text: #101f2e;
-  --text-secondary: #3d5163;
-  --muted: #5a6b79;
-  --text-inverse: #f7fafc;
+  --text: #e6eff4;
+  --text-secondary: #b3c5cf;
+  --muted: #8ba2b0;
+  --text-inverse: #06231a;
 
-  --line: rgba(16, 31, 46, 0.1);
-  --line-strong: rgba(16, 31, 46, 0.18);
-  --line-heavy: rgba(16, 31, 46, 0.28);
+  --line: rgba(139, 162, 176, 0.16);
+  --line-strong: rgba(139, 162, 176, 0.3);
+  --line-heavy: rgba(139, 162, 176, 0.45);
 
-  --accent: #0c6b4f;
-  --accent-hover: #0a5941;
-  --accent-quiet: rgba(12, 107, 79, 0.08);
-  --danger: #a12828;
-  --danger-quiet: rgba(161, 40, 40, 0.08);
+  --accent: #00d084;
+  --accent-hover: #2ee0a0;
+  --accent-quiet: rgba(0, 208, 132, 0.12);
+  --danger: #ef5350;
+  --danger-quiet: rgba(239, 83, 80, 0.13);
 
   /* Operational state. Refusal is deliberately NOT the same colour as a load
    * error: "the system declined this on purpose" and "something broke" are
    * different facts and an operator must not have to read text to tell them
    * apart. */
-  --state-refused: #8a5a00;
-  --state-refused-bg: rgba(138, 90, 0, 0.1);
-  --state-pending: #1d4464;
-  --state-pending-bg: rgba(29, 68, 100, 0.09);
-  --state-executed: #0c6b4f;
-  --state-executed-bg: rgba(12, 107, 79, 0.1);
-  --state-legacy: #5b4a86;
-  --state-legacy-bg: rgba(91, 74, 134, 0.1);
-  --state-stale: #5a6b79;
-  --state-stale-bg: rgba(90, 107, 121, 0.1);
-  --state-error: #a12828;
-  --state-error-bg: rgba(161, 40, 40, 0.08);
+  --state-refused: #ffa726;
+  --state-refused-bg: rgba(255, 167, 38, 0.12);
+  --state-pending: #4a9eff;
+  --state-pending-bg: rgba(74, 158, 255, 0.12);
+  --state-executed: #00d084;
+  --state-executed-bg: rgba(0, 208, 132, 0.12);
+  --state-legacy: #a78bfa;
+  --state-legacy-bg: rgba(167, 139, 250, 0.12);
+  --state-stale: #8ba2b0;
+  --state-stale-bg: rgba(139, 162, 176, 0.12);
+  --state-error: #ef5350;
+  --state-error-bg: rgba(239, 83, 80, 0.13);
 
   /* ---- Type -----------------------------------------------------------
    * One family. Six sizes. --fs-num carries tabular figures and is mandatory on
@@ -108,9 +116,9 @@
    * not "is a card" — data surfaces get --e-0 and a hairline instead.
    */
   --e-0: none;
-  --e-1: 0 1px 2px rgba(16, 31, 46, 0.06);
-  --e-2: 0 4px 12px rgba(16, 31, 46, 0.1);
-  --e-3: 0 16px 40px rgba(16, 31, 46, 0.18);
+  --e-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --e-2: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --e-3: 0 16px 40px rgba(0, 0, 0, 0.55);
 
   /* ---- Motion ---------------------------------------------------------- */
   --dur-fast: 120ms;
@@ -124,6 +132,70 @@
   --row-h: 2rem;
   --cell-px: 0.5rem;
   --shell-max: 1440px;
+}
+
+/**
+ * The one screen that stays light.
+ *
+ * Sign-in is the door: it is the first thing a new operator sees, it is often
+ * shown on someone else's phone or projected while onboarding, and it carries
+ * no operational data that benefits from a dark ground. Zoe asked for the
+ * operations language everywhere except here.
+ *
+ * This restores the previous palette for the subtree it is placed on, and sets
+ * its own ground because the body behind it is dark.
+ */
+.theme-light {
+  color-scheme: light;
+
+  --flag-green: #0a8f4d;
+  --navy: #12314b;
+  --navy-soft: #1d4464;
+
+  --bg: #eef2f4;
+  --bg-deep: #e4eaee;
+  --surface: #ffffff;
+  --surface-sunken: #f4f7f9;
+  --surface-raised: #ffffff;
+
+  --text: #101f2e;
+  --text-secondary: #3d5163;
+  --muted: #5a6b79;
+  --text-inverse: #f7fafc;
+
+  --line: rgba(16, 31, 46, 0.1);
+  --line-strong: rgba(16, 31, 46, 0.18);
+  --line-heavy: rgba(16, 31, 46, 0.28);
+
+  --accent: #0c6b4f;
+  --accent-hover: #0a5941;
+  --accent-quiet: rgba(12, 107, 79, 0.08);
+  --danger: #a12828;
+  --danger-quiet: rgba(161, 40, 40, 0.08);
+
+  --state-refused: #8a5a00;
+  --state-refused-bg: rgba(138, 90, 0, 0.1);
+  --state-pending: #1d4464;
+  --state-pending-bg: rgba(29, 68, 100, 0.09);
+  --state-executed: #0c6b4f;
+  --state-executed-bg: rgba(12, 107, 79, 0.1);
+  --state-legacy: #5b4a86;
+  --state-legacy-bg: rgba(91, 74, 134, 0.1);
+  --state-stale: #5a6b79;
+  --state-stale-bg: rgba(90, 107, 121, 0.1);
+  --state-error: #a12828;
+  --state-error-bg: rgba(161, 40, 40, 0.08);
+
+  --e-1: 0 1px 2px rgba(16, 31, 46, 0.06);
+  --e-2: 0 4px 12px rgba(16, 31, 46, 0.1);
+  --e-3: 0 16px 40px rgba(16, 31, 46, 0.18);
+
+  --flag-white: #f7fbf8;
+  --accent-3: #9f2f2d;
+
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
 }
 
 /* Keyboard operators exist. There were no focus-visible rings anywhere. */

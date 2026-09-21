@@ -162,6 +162,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <PublicAccessShell
+      theme="light"
       currentAccess="VOTER"
       brandSubtitle="Ogun Election Operations"
       authTitle="Sign In"

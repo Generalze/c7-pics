@@ -59,6 +59,7 @@ export function PublicAccessShell({
   authDescription,
   children,
   footerNote,
+  theme = "console",
 }: {
   currentAccess?: AccessKey;
   brandSubtitle: string;
@@ -66,9 +67,15 @@ export function PublicAccessShell({
   authDescription: string;
   children: ReactNode;
   footerNote?: ReactNode;
+  /**
+   * The platform runs on the dark operations palette everywhere. Sign-in is the
+   * one deliberate exception: it is the first screen a new operator meets and is
+   * often shown on someone else's phone, so it keeps the light treatment.
+   */
+  theme?: "console" | "light";
 }) {
   return (
-    <main className="starter-page">
+    <main className={theme === "light" ? "starter-page theme-light" : "starter-page"}>
       <div className="starter-page__bar" />
 
       <div className="starter-page__container">

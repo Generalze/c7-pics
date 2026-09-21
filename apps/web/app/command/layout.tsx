@@ -13,6 +13,7 @@ type NavItem = { href: string; label: string; icon: string; exact?: boolean };
 const NAV: NavItem[] = [
   { href: "/command", label: "Command Centre", icon: "▦", exact: true },
   { href: "/command/agents", label: "Agents", icon: "☖" },
+  { href: "/command/map", label: "Live Map", icon: "◉" },
   { href: "/command/results", label: "Results", icon: "☑" },
   { href: "/command/incidents", label: "Incidents", icon: "⚠" },
   { href: "/command/evidence", label: "Evidence Vault", icon: "🗎" },
@@ -22,6 +23,7 @@ const NAV: NavItem[] = [
 const TITLES: Record<string, string> = {
   "/command": "Command Centre",
   "/command/agents": "Agents",
+  "/command/map": "Live Map",
   "/command/results": "Results",
   "/command/incidents": "Incidents",
   "/command/evidence": "Evidence Vault",

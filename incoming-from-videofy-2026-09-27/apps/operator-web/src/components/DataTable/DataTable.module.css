@@ -1,0 +1,297 @@
+/* =============================================================================
+ * DataTable Component — styling
+ * Sortable, paginated table with sticky header and status badges
+ * Uses Videofy design tokens from @videofy-live/design-system
+ * ========================================================================== */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vf-space-4);
+  width: 100%;
+}
+
+.tableContainer {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: var(--vf-border-width-hairline) solid var(--vf-border-default);
+  border-radius: var(--vf-radius-md);
+  background: var(--vf-surface-1);
+  box-shadow: var(--vf-elevation-1);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--vf-font-family-sans);
+  font-size: var(--vf-font-size-sm);
+  line-height: var(--vf-line-height-snug);
+}
+
+/* ============================================================================
+ * HEADER
+ * ========================================================================== */
+
+.thead {
+  position: sticky;
+  top: 0;
+  z-index: var(--vf-z-sticky);
+  background: var(--vf-surface-2);
+  border-bottom: var(--vf-border-width-hairline) solid var(--vf-border-strong);
+}
+
+.th {
+  padding: var(--vf-space-3) var(--vf-space-4);
+  text-align: left;
+  font-weight: var(--vf-font-weight-semibold);
+  color: var(--vf-text-secondary);
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* Sortable column header */
+.sortable {
+  cursor: pointer;
+  transition: var(--vf-transition-colors);
+}
+
+.sortable:hover {
+  color: var(--vf-text-primary);
+  background: var(--vf-surface-3);
+}
+
+.sortableButton {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  cursor: pointer;
+  padding: var(--vf-space-1);
+  margin: calc(var(--vf-space-1) * -1);
+  border-radius: var(--vf-radius-xs);
+  transition: var(--vf-transition-colors);
+}
+
+.sortableButton:hover {
+  background: var(--vf-surface-accent-weak);
+}
+
+.sortableButton:focus {
+  outline: var(--vf-focus-ring);
+  outline-offset: var(--vf-focus-offset);
+}
+
+.sortIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--vf-icon-size-sm);
+  height: var(--vf-icon-size-sm);
+  font-size: var(--vf-font-size-sm);
+  opacity: 0.4;
+  transition: opacity var(--vf-duration-fast) var(--vf-ease-standard);
+}
+
+.sortable:hover .sortIcon {
+  opacity: 0.7;
+}
+
+.sortActive .sortIcon {
+  opacity: 1;
+  color: var(--vf-text-accent);
+}
+
+/* ============================================================================
+ * BODY
+ * ========================================================================== */
+
+.tbody {
+  background: var(--vf-surface-1);
+}
+
+.tr {
+  border-bottom: var(--vf-border-width-hairline) solid var(--vf-border-default);
+  transition: var(--vf-transition-colors);
+}
+
+.tr:last-child {
+  border-bottom: none;
+}
+
+.tr:hover {
+  background: var(--vf-surface-2);
+}
+
+.td {
+  padding: var(--vf-space-3) var(--vf-space-4);
+  text-align: left;
+  color: var(--vf-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================================
+ * STATUS BADGE
+ * ========================================================================== */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  height: var(--vf-control-height-sm);
+  padding: var(--vf-space-1) var(--vf-space-3);
+  border-radius: var(--vf-radius-pill);
+  font-size: var(--vf-font-size-xs);
+  font-weight: var(--vf-font-weight-medium);
+  white-space: nowrap;
+}
+
+.badge.success {
+  background: var(--vf-status-success-surface);
+  color: var(--vf-status-success-text);
+  border: var(--vf-border-width-hairline) solid var(--vf-status-success-border);
+}
+
+.badge.warn {
+  background: var(--vf-status-warn-surface);
+  color: var(--vf-status-warn-text);
+  border: var(--vf-border-width-hairline) solid var(--vf-status-warn-border);
+}
+
+.badge.danger {
+  background: var(--vf-status-danger-surface);
+  color: var(--vf-status-danger-text);
+  border: var(--vf-border-width-hairline) solid var(--vf-status-danger-border);
+}
+
+.badge.info {
+  background: var(--vf-status-info-surface);
+  color: var(--vf-status-info-text);
+  border: var(--vf-border-width-hairline) solid var(--vf-status-info-border);
+}
+
+.badge.neutral {
+  background: var(--vf-status-neutral-surface);
+  color: var(--vf-status-neutral-text);
+  border: var(--vf-border-width-hairline) solid var(--vf-status-neutral-border);
+}
+
+.badgeDot {
+  display: inline-block;
+  width: var(--vf-status-dot-size);
+  height: var(--vf-status-dot-size);
+  background: currentColor;
+  border-radius: var(--vf-radius-circle);
+}
+
+/* ============================================================================
+ * LOADING STATE
+ * ========================================================================== */
+
+.skeleton {
+  background: var(--vf-skeleton-background);
+  border-radius: var(--vf-skeleton-radius);
+  animation: skeleton-load var(--vf-skeleton-duration) var(--vf-skeleton-ease) infinite;
+  background-image: var(--vf-skeleton-sheen);
+  background-position: -1000px 0;
+  background-repeat: no-repeat;
+}
+
+@keyframes skeleton-load {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: calc(1000px + 100%) 0;
+  }
+}
+
+.skeletonRow {
+  height: 2.5rem;
+}
+
+/* ============================================================================
+ * PAGINATION
+ * ========================================================================== */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--vf-space-4);
+}
+
+.paginationInfo {
+  font-size: var(--vf-font-size-sm);
+  color: var(--vf-text-secondary);
+}
+
+.paginationControls {
+  display: flex;
+  gap: var(--vf-space-2);
+}
+
+.paginationButton {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--vf-control-height-md);
+  height: var(--vf-control-height-md);
+  padding: 0 var(--vf-space-2);
+  border: var(--vf-border-width-hairline) solid var(--vf-border-interactive);
+  border-radius: var(--vf-control-radius);
+  color: var(--vf-text-primary);
+  background: var(--vf-surface-1);
+  cursor: pointer;
+  font-size: var(--vf-font-size-sm);
+  font-weight: var(--vf-font-weight-medium);
+  transition: var(--vf-transition-colors);
+}
+
+.paginationButton:hover:not(:disabled) {
+  background: var(--vf-surface-2);
+  border-color: var(--vf-border-strong);
+  color: var(--vf-text-accent);
+}
+
+.paginationButton:focus {
+  outline: var(--vf-focus-ring);
+  outline-offset: var(--vf-focus-offset);
+}
+
+.paginationButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================================================
+ * RESPONSIVE
+ * ========================================================================== */
+
+@media (max-width: 767px) {
+  .table {
+    font-size: var(--vf-font-size-xs);
+  }
+
+  .th,
+  .td {
+    padding: var(--vf-space-2) var(--vf-space-3);
+  }
+
+  .pagination {
+    flex-direction: column;
+    gap: var(--vf-space-3);
+    align-items: stretch;
+  }
+
+  .paginationInfo {
+    text-align: center;
+  }
+
+  .paginationControls {
+    width: 100%;
+    justify-content: center;
+  }
+}
